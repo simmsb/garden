@@ -10,9 +10,18 @@ use feather_m0 as bsp;
 type LoRa =
     sx127x_lora::LoRa<bsp::Spi, Pin<PA06, PushPullOutput>, Pin<PA08, PushPullOutput>, Delay>;
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct DevAddr(u16);
+
 #[derive(serde::Serialize)]
 struct Message<'a> {
     msg: &'a str,
+}
+
+#[derive(serde::Serialize)]
+struct Transmission<T> {
+    src: DevAddr,
+    msg: T,
 }
 
 #[rtic::app(device = bsp::pac, peripherals = true, dispatchers = [EVSYS])]
@@ -94,7 +103,7 @@ mod app {
     fn radio(cx: radio::Context) {
         let mut buffer = [0; 255];
 
-        let msg = Message { msg: "lol" };
+        let msg = Message { msg: "poo" };
 
         let s = postcard::to_slice(&msg, &mut buffer).unwrap();
         let len = s.len();

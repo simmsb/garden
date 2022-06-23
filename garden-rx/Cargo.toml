@@ -1,0 +1,13 @@
+[package]
+name = "garden-rx"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+color-eyre = "0.6.1"
+linux-embedded-hal = "0.3.2"
+postcard = { version = "1.0.0", features = ["alloc", "postcard-derive", "use-std"], default-features = false }
+serde = { version = "1.0.137", features = ["alloc", "derive"] }
+sx127x_lora = "0.3.1"
