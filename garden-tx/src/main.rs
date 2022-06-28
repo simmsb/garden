@@ -10,39 +10,31 @@ use feather_m0 as bsp;
 type LoRa =
     sx127x_lora::LoRa<bsp::Spi, Pin<PA06, PushPullOutput>, Pin<PA08, PushPullOutput>, Delay>;
 
-#[derive(serde::Serialize, serde::Deserialize)]
-struct DevAddr(u16);
-
-#[derive(serde::Serialize)]
-struct Message<'a> {
-    msg: &'a str,
-}
-
-#[derive(serde::Serialize)]
-struct Transmission<T> {
-    src: DevAddr,
-    msg: T,
-}
-
 #[rtic::app(device = bsp::pac, peripherals = true, dispatchers = [EVSYS])]
 mod app {
     use super::*;
     use atsamd_hal::{
         clock::{ClockGenId, ClockSource, GenericClockController},
+        eic::{pin::Sense, EIC},
         pac::Peripherals,
         prelude::*,
         rtc::{Count32Mode, Duration, Rtc},
     };
     use bsp::{periph_alias, pin_alias};
+    use garden::moisture::Moisture;
+    use garden_shared::{DevAddr, Message, SensorReport, Transmission};
 
     #[local]
     struct Local {
         red_led: bsp::RedLed,
         lora: LoRa,
+        eic: EIC,
     }
 
     #[shared]
-    struct Shared {}
+    struct Shared {
+        moisture: Moisture<3>,
+    }
 
     #[monotonic(binds = RTC, default = true)]
     type RtcMonotonic = Rtc<Count32Mode>;
@@ -58,7 +50,8 @@ mod app {
             &mut p.SYSCTRL,
             &mut p.NVMCTRL,
         );
-        let _gclk = clocks.gclk0();
+        let _gclk0 = clocks.gclk0();
+        let gclk1 = clocks.gclk1();
         let rtc_clock_src = clocks
             .configure_gclk_divider_and_source(ClockGenId::GCLK2, 1, ClockSource::XOSC32K, false)
             .unwrap();
@@ -66,6 +59,9 @@ mod app {
         clocks.configure_standby(ClockGenId::GCLK2, true);
         let rtc_clock = clocks.rtc(&rtc_clock_src).unwrap();
         let rtc = Rtc::count32_mode(p.RTC, rtc_clock.freq(), &mut p.PM);
+
+        let eic_clock = clocks.eic(&gclk1).unwrap();
+        let mut eic = feather_m0::hal::eic::EIC::init(&mut p.PM, eic_clock, p.EIC);
 
         core.SCB.set_sleepdeep();
 
@@ -91,26 +87,59 @@ mod app {
         )
         .unwrap();
 
-        lora.set_tx_power(5, 1).unwrap();
+        lora.set_tx_power(10, 1).unwrap();
+
+        let mut a0 = pins.a0.into_floating_ei();
+        a0.sense(&mut eic, Sense::RISE);
+
+        let a1 = pins.a1.into_push_pull_output();
+        let a2 = pins.a2.into_push_pull_output();
+        let a3 = pins.a3.into_push_pull_output();
+
+        let moisture = Moisture::<3>::new(a0, a1, a2, a3);
 
         blink::spawn().unwrap();
-        radio::spawn().unwrap();
+        moisture_ticker::spawn().unwrap();
 
-        (Shared {}, Local { red_led, lora }, init::Monotonics(rtc))
+        (
+            Shared { moisture },
+            Local { red_led, lora, eic },
+            init::Monotonics(rtc),
+        )
     }
 
-    #[task(local = [lora])]
-    fn radio(cx: radio::Context) {
+    #[task(local = [lora], capacity = 3)]
+    fn broadcast_message(cx: broadcast_message::Context, msg: Message) {
         let mut buffer = [0; 255];
 
-        let msg = Message { msg: "poo" };
+        let trans = Transmission {
+            src: DevAddr(0x69),
+            msg,
+        };
 
-        let s = postcard::to_slice(&msg, &mut buffer).unwrap();
+        let s = postcard::to_slice(&trans, &mut buffer).unwrap();
         let len = s.len();
 
         cx.local.lora.transmit_payload(buffer, len).unwrap();
+    }
 
-        let _ = radio::spawn_after(Duration::secs(1));
+    #[task(shared = [moisture], local = [eic])]
+    fn moisture_ticker(mut cx: moisture_ticker::Context) {
+        let delay = cx.shared.moisture.lock(|m| {
+            let delay = m.step_state(cx.local.eic, monotonics::now());
+
+            if m.is_reading_ready() {
+                let readings = m.format_message();
+
+                let report = SensorReport { moisture: readings };
+
+                let _ = broadcast_message::spawn(Message::Report(report));
+            }
+
+            delay
+        });
+
+        let _ = moisture_ticker::spawn_after(delay);
     }
 
     #[task(local = [red_led])]
@@ -118,5 +147,10 @@ mod app {
         cx.local.red_led.toggle().unwrap();
 
         let _ = blink::spawn_after(Duration::secs(1));
+    }
+
+    #[task(priority = 3, binds = EIC, shared = [moisture])]
+    fn eic(mut cx: eic::Context) {
+        cx.shared.moisture.lock(|m| m.tick_count());
     }
 }

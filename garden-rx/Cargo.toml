@@ -9,5 +9,5 @@ edition = "2021"
 color-eyre = "0.6.1"
 linux-embedded-hal = "0.3.2"
 postcard = { version = "1.0.0", features = ["alloc", "postcard-derive", "use-std"], default-features = false }
-serde = { version = "1.0.137", features = ["alloc", "derive"] }
 sx127x_lora = "0.3.1"
+garden-shared = { path = "../garden-shared/" }

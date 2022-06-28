@@ -1,4 +1,5 @@
 use color_eyre::Result;
+use garden_shared::{Message, Transmission};
 use linux_embedded_hal as hal;
 
 use hal::spidev::{self, SpidevOptions};
@@ -9,11 +10,6 @@ use hal::{Pin, Spidev};
 const LORA_CS_PIN: u64 = 26;
 const LORA_RESET_PIN: u64 = 22;
 const FREQUENCY: i64 = 868;
-
-#[derive(serde::Deserialize, Debug)]
-struct Message {
-    msg: String,
-}
 
 fn main() -> Result<()> {
     color_eyre::install()?;
@@ -56,7 +52,7 @@ fn inner(lora: &mut sx127x_lora::LoRa<Spidev, Pin, Pin, Delay>) -> Result<()> {
             let buffer = lora
                 .read_packet()
                 .map_err(|e| color_eyre::eyre::eyre!("Oops: {:?}", e))?;
-            let msg: Message = postcard::from_bytes(&buffer[..size])?;
+            let msg: Transmission<Message> = postcard::from_bytes(&buffer[..size])?;
             println!("msg: {:?}", msg);
         }
         Err(e) => println!("Timeout: {:?}", e),
