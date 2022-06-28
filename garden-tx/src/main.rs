@@ -65,6 +65,24 @@ mod app {
 
         core.SCB.set_sleepdeep();
 
+        p.PM.ahbmask.modify(|_, w| {
+            w.usb_().clear_bit();
+            w.dmac_().clear_bit()
+        });
+        p.PM.apbamask.modify(|_, w| {
+            w.wdt_().clear_bit();
+            w.sysctrl_().clear_bit();
+            w.pac0_().clear_bit()
+        });
+        p.PM.apbbmask.modify(|_, w| {
+            w.usb_().clear_bit();
+            w.dmac_().clear_bit();
+            w.nvmctrl_().clear_bit();
+            w.dsu_().clear_bit();
+            w.pac1_().clear_bit()
+        });
+        p.PM.apbcmask.modify(|_, w| w.adc_().clear_bit());
+
         let red_led = pin_alias!(pins.red_led).into_push_pull_output();
 
         let spi_sercom = periph_alias!(p.spi_sercom);
@@ -125,19 +143,23 @@ mod app {
 
     #[task(shared = [moisture], local = [eic])]
     fn moisture_ticker(mut cx: moisture_ticker::Context) {
-        let delay = cx.shared.moisture.lock(|m| {
+        let (delay, reading) = cx.shared.moisture.lock(|m| {
             let delay = m.step_state(cx.local.eic, monotonics::now());
 
-            if m.is_reading_ready() {
-                let readings = m.format_message();
+            let reading = if m.is_reading_ready() {
+                Some(m.format_message())
+            } else {
+                None
+            };
 
-                let report = SensorReport { moisture: readings };
-
-                let _ = broadcast_message::spawn(Message::Report(report));
-            }
-
-            delay
+            (delay, reading)
         });
+
+        if let Some(moisture) = reading {
+            let report = SensorReport { moisture };
+
+            let _ = broadcast_message::spawn(Message::Report(report));
+        }
 
         let _ = moisture_ticker::spawn_after(delay);
     }
@@ -152,5 +174,12 @@ mod app {
     #[task(priority = 3, binds = EIC, shared = [moisture])]
     fn eic(mut cx: eic::Context) {
         cx.shared.moisture.lock(|m| m.tick_count());
+    }
+
+    #[idle]
+    fn idle(_cx: idle::Context) -> ! {
+        loop {
+            cortex_m::asm::wfi();
+        }
     }
 }

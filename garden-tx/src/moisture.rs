@@ -60,6 +60,7 @@ where
 
     fn set_on(&mut self, eic: &mut EIC) {
         self.a0.enable_interrupt(eic);
+        self.a0.enable_interrupt_wake(eic);
         self.count = 0;
         self.readings.fill(None);
     }
