@@ -12,6 +12,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "aligned"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a785a543aea40f5e4e2e93bb2655d31bc21bb391fff65697150973e383f16bb"
+dependencies = [
+ "as-slice",
+]
+
+[[package]]
+name = "as-slice"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45403b49e3954a4b8428a0ac21a4b7afadccf92bfd96273f1a58cd4812496ae0"
+dependencies = [
+ "generic-array 0.12.4",
+ "generic-array 0.13.3",
+ "generic-array 0.14.5",
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "atomic-polyfill"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -29,7 +50,7 @@ dependencies = [
  "atsamd21g",
  "bitfield",
  "bitflags",
- "cortex-m",
+ "cortex-m 0.7.5",
  "embedded-hal",
  "fugit",
  "modular-bitfield",
@@ -50,7 +71,7 @@ version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ec93ce03e1b6c6f852c5b3a1d9f2e489c30c0eddca07487083bb783ebc05bad"
 dependencies = [
- "cortex-m",
+ "cortex-m 0.7.5",
  "cortex-m-rt",
  "vcell",
 ]
@@ -120,6 +141,19 @@ checksum = "67ba02a97a2bd10f4b59b25c7973101c79642302776489e030cd13cdab09ed15"
 
 [[package]]
 name = "cortex-m"
+version = "0.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9075300b07c6a56263b9b582c214d0ff037b00d45ec9fde1cc711490c56f1bb9"
+dependencies = [
+ "aligned",
+ "bare-metal 0.2.5",
+ "bitfield",
+ "cortex-m 0.7.5",
+ "volatile-register",
+]
+
+[[package]]
+name = "cortex-m"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cd20d4ac4aa86f4f75f239d59e542ef67de87cce2c282818dc6e84155d3ea126"
@@ -157,7 +191,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98a097c263ab165237f8883f2aa4c3e7e0d15bb20caaa8e9a276398421400fd0"
 dependencies = [
  "bare-metal 1.0.0",
- "cortex-m",
+ "cortex-m 0.7.5",
  "cortex-m-rtic-macros",
  "heapless",
  "rtic-core",
@@ -186,7 +220,7 @@ checksum = "95da181745b56d4bd339530ec393508910c909c784e8962d15d722bacf0bcbcd"
 dependencies = [
  "bare-metal 1.0.0",
  "cfg-if",
- "cortex-m",
+ "cortex-m 0.7.5",
  "riscv",
 ]
 
@@ -230,6 +264,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "drogue-bme680"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e594e6874d77c36e1d0c79b068ff0d409e7fd4aa4b27f3ce0d18f35ad9755f10"
+dependencies = [
+ "bitfield",
+ "drogue-embedded-timer",
+ "embedded-hal",
+ "embedded-time",
+ "log",
+]
+
+[[package]]
+name = "drogue-embedded-timer"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b3ce16cc5d5c92fb06649f6d01bbca2d9cfa0db1b09b09e1a033b009fd79b38a"
+dependencies = [
+ "cortex-m 0.6.7",
+ "embedded-time",
+]
+
+[[package]]
 name = "embedded-hal"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -240,10 +297,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "embedded-io"
-version = "0.3.0"
+name = "embedded-time"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36673b79844ff4ec0e3f00aeca0b2cfff564ff6739ab9801d13f45a8ec6cc1c7"
+checksum = "f85ab0d224a6c70f11426a9f04d5f26d250605b80df8fbed197e49d4454f58d7"
+dependencies = [
+ "num",
+]
 
 [[package]]
 name = "feather_m0"
@@ -271,14 +331,13 @@ dependencies = [
  "atomic-polyfill",
  "atsamd-hal",
  "bit_field 0.10.1",
- "cortex-m",
+ "cortex-m 0.7.5",
  "cortex-m-rt",
  "cortex-m-rtic",
  "critical-section",
  "defmt",
  "defmt-rtt",
- "embedded-hal",
- "embedded-io",
+ "drogue-bme680",
  "feather_m0",
  "fugit",
  "garden-shared",
@@ -287,14 +346,17 @@ dependencies = [
  "postcard",
  "serde",
  "sx127x_lora",
+ "uom",
 ]
 
 [[package]]
 name = "garden-shared"
 version = "0.1.0"
 dependencies = [
+ "fugit",
  "heapless",
  "serde",
+ "uom",
 ]
 
 [[package]]
@@ -304,6 +366,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f37978dab2ca789938a83b2f8bc1ef32db6633af9051a6cd409eff72cbaaa79a"
 dependencies = [
  "paste",
+]
+
+[[package]]
+name = "generic-array"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffdf9f34f1447443d37393cc6c2b8313aebddcd96906caf34e54c68d8e57d7bd"
+dependencies = [
+ "typenum",
+]
+
+[[package]]
+name = "generic-array"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f797e67af32588215eaaab8327027ee8e71b9dd0b2b26996aedf20c030fce309"
+dependencies = [
+ "typenum",
+]
+
+[[package]]
+name = "generic-array"
+version = "0.14.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd48d33ec7f05fbfa152300fdad764757cbded343c1aa1cff2fbaf4134851803"
+dependencies = [
+ "typenum",
+ "version_check",
 ]
 
 [[package]]
@@ -362,6 +452,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "log"
+version = "0.4.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -404,6 +503,71 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "546c37ac5d9e56f55e73b677106873d9d9f5190605e41a856503623648488cae"
 
 [[package]]
+name = "num"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b7a8e9be5e039e2ff869df49155f1c06bd01ade2117ec783e56ab0932b67a8f"
+dependencies = [
+ "num-complex",
+ "num-integer",
+ "num-iter",
+ "num-rational 0.3.2",
+ "num-traits",
+]
+
+[[package]]
+name = "num-complex"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "747d632c0c558b87dbabbe6a82f3b4ae03720d0646ac5b7b4dae89394be5f2c5"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "num-integer"
+version = "0.1.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
+dependencies = [
+ "autocfg",
+ "num-traits",
+]
+
+[[package]]
+name = "num-iter"
+version = "0.1.43"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d03e6c028c5dc5cac6e2dec0efda81fc887605bb3d884578bb6d6bf7514e252"
+dependencies = [
+ "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12ac428b1cb17fce6f731001d307d351ec70a6d202fc2e60f7d4c5e42d8f4f07"
+dependencies = [
+ "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-rational"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
+dependencies = [
+ "autocfg",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -418,7 +582,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ab1f00eac22bd18f8e5cae9555f2820b3a0c166b5b556ee3e203746ea6dcf3a"
 dependencies = [
- "cortex-m",
+ "cortex-m 0.7.5",
  "defmt",
 ]
 
@@ -673,6 +837,18 @@ name = "unicode-ident"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5bd2fe26506023ed7b5e1e315add59d6f584c621d037f9368fea9cfb988f368c"
+
+[[package]]
+name = "uom"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53e68fe0bfdacf0a6cef0efec5dcc295b836cde69b01ad93feb18488fa82050d"
+dependencies = [
+ "num-rational 0.4.1",
+ "num-traits",
+ "serde",
+ "typenum",
+]
 
 [[package]]
 name = "vcell"

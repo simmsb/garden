@@ -3,6 +3,7 @@
 #![feature(generic_const_exprs)]
 
 pub mod moisture;
+pub mod bme688;
 
 #[cfg(feature = "debugger")]
 use defmt_rtt as _;

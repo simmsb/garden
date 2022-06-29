@@ -3,7 +3,7 @@ use atsamd_hal::eic::EIC;
 use atsamd_hal::gpio::{Floating, Interrupt, Output, Pin, PushPull, PA02, PA04, PB08, PB09};
 use atsamd_hal::prelude::_atsamd_hal_embedded_hal_digital_v2_OutputPin;
 use atsamd_hal::rtc::{Duration, Instant};
-use garden_shared::MoistureReading;
+use garden_shared::{MoistureReading, MoistureSensorReport};
 
 mod lessthan {
     struct If<const B: bool>;
@@ -83,22 +83,25 @@ where
         matches!(self.state, State::Off)
     }
 
-    pub fn format_message(&self) -> heapless::Vec<MoistureReading, 8> {
-        self.readings
+    pub fn format_message(&self) -> MoistureSensorReport {
+        let r = self
+            .readings
             .iter()
             .map(|r| {
                 let (clocks, duration) = r.unwrap();
 
                 MoistureReading {
                     clocks,
-                    duration_ms: duration.to_millis() as u16,
+                    duration: core::time::Duration::from_millis(duration.to_millis() as u64),
                 }
             })
-            .collect::<heapless::Vec<_, 8>>()
+            .collect::<heapless::Vec<_, 8>>();
+
+        MoistureSensorReport { moisture: r }
     }
 
     pub fn step_state(&mut self, eic: &mut EIC, now: Instant) -> Duration {
-        const BETWEEN_MEASUREMENTS_DELAY: Duration = Duration::secs(5);
+        const BETWEEN_MEASUREMENTS_DELAY: Duration = Duration::secs(6);
         const BETWEEN_READINGS_DELAY: Duration = Duration::secs(1);
 
         let (new_state, next_step_delay) = match self.state {
@@ -109,7 +112,9 @@ where
             }
             State::Measuring(n, inst) => {
                 let reading = core::mem::replace(&mut self.count, 0);
-                let duration = now.checked_duration_since(inst).unwrap_or(Duration::from_ticks(0));
+                let duration = now
+                    .checked_duration_since(inst)
+                    .unwrap_or(Duration::from_ticks(0));
                 self.readings[n as usize] = Some((reading, duration));
 
                 if (n + 1) as usize == PINS {
