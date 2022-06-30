@@ -35,14 +35,24 @@ impl Bme688 {
         Self { bme: controller }
     }
 
+    fn sanity_check(report: BME688SensorReport) -> Option<BME688SensorReport> {
+        if report.temp > ThermodynamicTemperature::new::<degree_celsius>(80.0) {
+            return None;
+        }
+
+        Some(report)
+    }
+
     pub fn read(&mut self) -> Option<BME688SensorReport> {
         let result = self.bme.measure_default().unwrap()?;
 
-        Some(BME688SensorReport {
-            temp: ThermodynamicTemperature::new::<degree_celsius>(result.temperature),
+        let report = BME688SensorReport {
+            temp: ThermodynamicTemperature::new::<degree_celsius>(result.temperature - 10.0),
             pressure: Pressure::new::<pascal>(result.pressure.unwrap_or(0.0)),
             humidity: Ratio::new::<percent>(result.humidity),
             gas_resistance: ElectricalResistance::new::<ohm>(result.gas_resistance),
-        })
+        };
+
+        Self::sanity_check(report)
     }
 }
