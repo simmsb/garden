@@ -11,3 +11,8 @@ linux-embedded-hal = "0.3.2"
 postcard = { version = "1.0.0", features = ["alloc", "postcard-derive", "use-std"], default-features = false }
 sx127x_lora = "0.3.1"
 garden-shared = { path = "../garden-shared/" }
+uom = { version = "0.33.0", default-features = false, features = ["f32", "u16", "u32", "si", "std"] }
+chrono = "0.4.19"
+prometheus = { version = "0.13.1", features = ["push"], git = "https://github.com/simmsb/rust-prometheus" }
+url = "2.2.2"
+once_cell = "1.12.0"

@@ -1,0 +1,3 @@
+[toolchain]
+components = ["rust-src", "rustfmt"]
+targets = ["aarch64-unknown-linux-gnu"]
