@@ -9,6 +9,7 @@ use drogue_bme680::{
 };
 use feather_m0::I2c;
 use garden_shared::BME688SensorReport;
+use micromath::F32Ext;
 use uom::si::electrical_resistance::ohm;
 use uom::si::f32::ElectricalResistance;
 use uom::si::f32::{Pressure, Ratio, ThermodynamicTemperature};
@@ -18,6 +19,7 @@ use uom::si::thermodynamic_temperature::degree_celsius;
 
 pub struct Bme688 {
     bme: Bme680Controller<I2c, DelayMsWrapper<SleepingDelay<TimerCounter4>>, StaticProvider>,
+    last: Option<BME688SensorReport>,
 }
 
 pub static TC4_FIRED: AtomicBool = AtomicBool::new(false);
@@ -28,16 +30,36 @@ impl Bme688 {
         let delay = DelayMsWrapper::new(SleepingDelay::new(timer, &TC4_FIRED));
 
         let bme = Bme680Sensor::from(i2c, drogue_bme680::Address::Primary).unwrap();
-        let controller =
-            Bme680Controller::new(bme, delay, Configuration::standard(), StaticProvider(14))
-                .unwrap();
 
-        Self { bme: controller }
+        let mut config = Configuration::standard();
+        config.run_gas = false;
+
+        let controller = Bme680Controller::new(bme, delay, config, StaticProvider(14)).unwrap();
+
+        Self {
+            bme: controller,
+            last: None,
+        }
     }
 
-    fn sanity_check(report: BME688SensorReport) -> Option<BME688SensorReport> {
+    fn sanity_check(&self, report: BME688SensorReport) -> Option<BME688SensorReport> {
         if report.temp > ThermodynamicTemperature::new::<degree_celsius>(80.0) {
             return None;
+        }
+
+        if let Some(last) = self.last.as_ref() {
+            if (last.temp.get::<degree_celsius>() - report.temp.get::<degree_celsius>()).abs()
+                > 20.0
+            {
+                return None;
+            }
+            if (last.pressure - report.pressure).abs() > Pressure::new::<pascal>(100.0) {
+                return None;
+            }
+
+            if (last.humidity - report.humidity).abs() > Ratio::new::<percent>(10.0) {
+                return None;
+            }
         }
 
         Some(report)
@@ -53,6 +75,8 @@ impl Bme688 {
             gas_resistance: ElectricalResistance::new::<ohm>(result.gas_resistance),
         };
 
-        Self::sanity_check(report)
+        let report = self.sanity_check(report)?;
+        self.last = Some(report.clone());
+        Some(report)
     }
 }

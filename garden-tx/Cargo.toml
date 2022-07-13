@@ -43,6 +43,7 @@ uom = { version = "0.33.0", default-features = false, features = [
   "si",
 ] }
 drogue-bme680 = "0.3.0"
+micromath = "2.0.0"
 
 
 [features]

@@ -18,7 +18,7 @@ pub struct MoistureSensorReport {
     pub moisture: heapless::Vec<MoistureReading, 8>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct BME688SensorReport {
     pub temp: ThermodynamicTemperature,
     pub pressure: Pressure,
