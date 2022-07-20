@@ -9,7 +9,6 @@ use drogue_bme680::{
 };
 use feather_m0::I2c;
 use garden_shared::BME688SensorReport;
-use micromath::F32Ext;
 use uom::si::electrical_resistance::ohm;
 use uom::si::f32::ElectricalResistance;
 use uom::si::f32::{Pressure, Ratio, ThermodynamicTemperature};
@@ -42,40 +41,17 @@ impl Bme688 {
         }
     }
 
-    fn sanity_check(&self, report: BME688SensorReport) -> Option<BME688SensorReport> {
-        if report.temp > ThermodynamicTemperature::new::<degree_celsius>(80.0) {
-            return None;
-        }
-
-        if let Some(last) = self.last.as_ref() {
-            if (last.temp.get::<degree_celsius>() - report.temp.get::<degree_celsius>()).abs()
-                > 20.0
-            {
-                return None;
-            }
-            if (last.pressure - report.pressure).abs() > Pressure::new::<pascal>(100.0) {
-                return None;
-            }
-
-            if (last.humidity - report.humidity).abs() > Ratio::new::<percent>(10.0) {
-                return None;
-            }
-        }
-
-        Some(report)
-    }
-
     pub fn read(&mut self) -> Option<BME688SensorReport> {
         let result = self.bme.measure_default().unwrap()?;
 
         let report = BME688SensorReport {
-            temp: ThermodynamicTemperature::new::<degree_celsius>(result.temperature - 10.0),
+            temp: ThermodynamicTemperature::new::<degree_celsius>(result.temperature - 5.0),
             pressure: Pressure::new::<pascal>(result.pressure.unwrap_or(0.0)),
             humidity: Ratio::new::<percent>(result.humidity),
             gas_resistance: ElectricalResistance::new::<ohm>(result.gas_resistance),
         };
 
-        let report = self.sanity_check(report)?;
+        let report = report.sanity_check(self.last.as_ref())?;
         self.last = Some(report.clone());
         Some(report)
     }

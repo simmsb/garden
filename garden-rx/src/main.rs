@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use color_eyre::Result;
 use filter::kalman::kalman_filter::KalmanFilter;
-use garden_shared::{Message, Transmission};
+use garden_shared::{BME688SensorReport, Message, Transmission};
 use linux_embedded_hal as hal;
 
 use hal::spidev::{self, SpidevOptions};
@@ -93,6 +93,7 @@ struct Exporter {
     humidity_filter: KalmanFilter<f32, U1, U1, U1>,
     pressure_filter: KalmanFilter<f32, U1, U1, U1>,
     moisture_filters: [KalmanFilter<f32, U1, U1, U1>; 3],
+    last_reading: Option<BME688SensorReport>,
 }
 
 impl Exporter {
@@ -100,23 +101,23 @@ impl Exporter {
         let mut temp_filter = KalmanFilter::default();
         temp_filter.x = Vector1::new(19.0);
         temp_filter.H = Vector1::new(1.0);
-        temp_filter.Q = Matrix1::repeat(0.0001);
+        temp_filter.Q = Matrix1::repeat(0.01);
 
         let mut humidity_filter = KalmanFilter::default();
         humidity_filter.x = Vector1::new(50.0);
         humidity_filter.H = Vector1::new(1.0);
-        humidity_filter.Q = Matrix1::repeat(0.0001);
+        humidity_filter.Q = Matrix1::repeat(0.01);
 
         let mut pressure_filter = KalmanFilter::default();
         pressure_filter.x = Vector1::new(100.0);
         pressure_filter.H = Vector1::new(1.0);
-        pressure_filter.Q = Matrix1::repeat(0.0001);
+        pressure_filter.Q = Matrix1::repeat(0.01);
 
         let moisture_filters = [(); 3].map(|_| {
             let mut moisture_filter = KalmanFilter::default();
             moisture_filter.x = Vector1::new(17.0);
             moisture_filter.H = Vector1::new(1.0);
-            moisture_filter.Q = Matrix1::repeat(0.0001);
+            moisture_filter.Q = Matrix1::repeat(0.01);
 
             moisture_filter
         });
@@ -126,6 +127,7 @@ impl Exporter {
             humidity_filter,
             pressure_filter,
             moisture_filters,
+            last_reading: None,
         }
     }
 
@@ -137,7 +139,6 @@ impl Exporter {
                     let filter = &mut self.moisture_filters[n];
                     filter.update(&level, None, None);
                     filter.predict(None, None, None, None);
-
 
                     MOISTURE_LEVEL.set(filter.x[0] as f64);
 
@@ -157,6 +158,11 @@ impl Exporter {
                 }
             }
             Message::BME688Report(r) => {
+                let r = r
+                    .sanity_check(self.last_reading.as_ref())
+                    .ok_or_else(|| color_eyre::eyre::eyre!("Invalid reading"))?;
+                self.last_reading = Some(r.clone());
+
                 let temp = Vector1::new(r.temp.get::<degree_celsius>());
                 let pressure = Vector1::new(r.pressure.get::<pascal>());
                 let humidity = Vector1::new(r.humidity.get::<percent>());
