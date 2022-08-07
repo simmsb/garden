@@ -78,7 +78,7 @@ pub enum Message {
     StatusUpdate(DeviceStatus),
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 pub enum Command {
     PumpOn,
     PumpOff,
@@ -90,4 +90,10 @@ pub enum Command {
 pub struct Transmission<T> {
     pub src: DevAddr,
     pub msg: T,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
+pub enum PanelMessage {
+    Hello,
+    Status(DeviceStatus),
 }

@@ -7,7 +7,7 @@ use std::time::SystemTime;
 use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 use fermi::{use_atom_state, use_init_atom_root, use_read, use_set, Atom};
-use garden_shared::{Command, DeviceStatus, StatusFlags};
+use garden_shared::{Command, DeviceStatus, PanelMessage, StatusFlags};
 use serde::{Deserialize, Serialize};
 use websocket_hook::{use_ws_context, use_ws_context_provider_json, DioxusWs};
 
@@ -35,47 +35,72 @@ impl LogEntry {
     }
 }
 
-pub static PUMP_STATUS: Atom<Option<bool>> = |_| None;
-pub static VALVE_STATUS: Atom<Option<bool>> = |_| None;
-pub static COMMAND_LOG: Atom<Vec<LogEntry>> = |_| Vec::new();
-
 fn app(cx: Scope) -> Element {
     use_init_atom_root(&cx);
-    let pump_status = use_atom_state(&cx, PUMP_STATUS).clone();
-    let valve_status = use_atom_state(&cx, VALVE_STATUS).clone();
-    let mut log = use_atom_state(&cx, COMMAND_LOG).clone();
-    use_ws_context_provider_json(&cx, env!("GARDEN_WS"), move |msg: DeviceStatus| {
-        let pump_on = msg.flags.contains(StatusFlags::PUMP_ON);
-        if *pump_status.current() != Some(pump_on) {
-            pump_status.set(Some(pump_on));
-            log.with_mut(|x| {
-                x.push(LogEntry::new(if pump_on {
-                    "Pump turned ON"
-                } else {
-                    "Pump turned OFF"
-                }));
-            })
-        }
 
-        let valve_on = msg.flags.contains(StatusFlags::VALVE_OPEN);
-        if *valve_status.current() != Some(valve_on) {
-            valve_status.set(Some(valve_on));
-            log.with_mut(|x| {
-                x.push(LogEntry::new(if valve_on {
-                    "Valve OPENED"
-                } else {
-                    "Valve CLOSED"
-                }));
-            })
+    let pump_status = use_ref(&cx, || None::<bool>);
+    let valve_status = use_ref(&cx, || None::<bool>);
+    let log = use_ref(&cx, || vec![]);
+
+    let url = web_sys::window().unwrap().location().origin().unwrap();
+    let mut url = url::Url::parse(&url).unwrap();
+    url.set_path("ws");
+    url.set_scheme(if url.scheme() == "https" { "wss" } else { "ws" });
+
+    log::info!("ws url: {}", url);
+
+    use_ws_context_provider_json(&cx, url.as_ref(), {
+        let pump_status = pump_status.clone();
+        let valve_status = valve_status.clone();
+        let log = log.clone();
+        move |msg: PanelMessage| {
+            log::info!("Got message: {:?}", msg);
+            match msg {
+                PanelMessage::Status(msg) => {
+                    let mut to_add = vec![];
+
+                    let pump_on = msg.flags.contains(StatusFlags::PUMP_ON);
+                    if *pump_status.read() != Some(pump_on) {
+                        pump_status.set(Some(pump_on));
+                        to_add.push(LogEntry::new(if pump_on {
+                            "Pump turned ON"
+                        } else {
+                            "Pump turned OFF"
+                        }));
+                    }
+
+                    let valve_on = msg.flags.contains(StatusFlags::VALVE_OPEN);
+                    if *valve_status.read() != Some(valve_on) {
+                        valve_status.set(Some(valve_on));
+                        to_add.push(LogEntry::new(if valve_on {
+                            "Valve OPENED"
+                        } else {
+                            "Valve CLOSED"
+                        }));
+                    }
+
+                    log.with_mut(|x| x.extend(to_add));
+                }
+                PanelMessage::Hello => {}
+            }
         }
     });
 
-    cx.render(rsx!(ResponseDisplay {}))
+    cx.render(rsx!(ResponseDisplay {
+        pump_status: pump_status.clone(),
+        valve_status: valve_status.clone(),
+        log: log.clone(),
+    }))
 }
 
-fn ResponseDisplay(cx: Scope) -> Element {
+#[inline_props]
+fn ResponseDisplay(
+    cx: Scope,
+    pump_status: UseRef<Option<bool>>,
+    valve_status: UseRef<Option<bool>>,
+    log: UseRef<Vec<LogEntry>>,
+) -> Element {
     let ws = use_ws_context(&cx);
-    let mut log = use_atom_state(&cx, COMMAND_LOG);
     let pump_on = (|ws: DioxusWs| {
         move |_| {
             log.with_mut(|x| {
@@ -137,7 +162,9 @@ fn ResponseDisplay(cx: Scope) -> Element {
                     onclick: pump_off,
                     "Disable Pump"
                 }
-                PumpStatus {}
+                PumpStatus {
+                    pump_status: pump_status.clone(),
+                }
             }
             div {
                 class: "justify-center flex space-x-2 bg-gray-50 text-gray-800 py-6 px-6",
@@ -151,20 +178,21 @@ fn ResponseDisplay(cx: Scope) -> Element {
                     onclick: valve_off,
                     "Disable Valve"
                 }
-                ValveStatus {}
+                ValveStatus {
+                    valve_status: valve_status.clone()
+                }
             }
-            CommandLog {}
+            CommandLog { log: log.clone() }
         }
     ))
 }
 
-fn CommandLog(cx: Scope) -> Element {
-    let log = use_read(&cx, COMMAND_LOG);
-
+#[inline_props]
+fn CommandLog(cx: Scope, log: UseRef<Vec<LogEntry>>) -> Element {
     cx.render(rsx!(
         div {
             class: "mx-auto drop-shadow-lg m-4 rounded-lg font-mono w-8/12",
-            log.iter().rev().map(|l| {
+            log.read().iter().rev().map(|l| {
                 let msg = &l.msg;
                 let ts = l.when.format("%Y-%m-%d %H:%M:%S");
                 let k = l.when.timestamp_nanos();
@@ -188,8 +216,9 @@ fn CommandLog(cx: Scope) -> Element {
     ))
 }
 
-fn PumpStatus(cx: Scope) -> Element {
-    let pump_status = match use_read(&cx, PUMP_STATUS) {
+#[inline_props]
+fn PumpStatus(cx: Scope, pump_status: UseRef<Option<bool>>) -> Element {
+    let pump_status = match *pump_status.read() {
         Some(true) => "On ✅",
         Some(false) => "Off ❌",
         None => "Unknown",
@@ -197,8 +226,9 @@ fn PumpStatus(cx: Scope) -> Element {
     cx.render(rsx!(span { "Pump Status: {pump_status}" }))
 }
 
-fn ValveStatus(cx: Scope) -> Element {
-    let valve_status = match use_read(&cx, VALVE_STATUS) {
+#[inline_props]
+fn ValveStatus(cx: Scope, valve_status: UseRef<Option<bool>>) -> Element {
+    let valve_status = match *valve_status.read() {
         Some(true) => "On ✅",
         Some(false) => "Off ❌",
         None => "Unknown",

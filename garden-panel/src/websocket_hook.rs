@@ -40,6 +40,8 @@ impl DioxusWs {
         let sender = self.sender.clone();
         let is_open = self.is_open.clone();
 
+        log::info!("Sending message {:?}", msg);
+
         spawn_local(async move {
             let is_open = *is_open.read().await;
 
