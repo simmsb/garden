@@ -33,8 +33,7 @@ heapless = { version = "0.7.15", features = ["serde"] }
 # lorawan-device = "0.7.1"
 panic-probe = { version = "0.3.0", features = ["print-defmt"], optional = true }
 postcard = "1.0.1"
-serde = { version = "1.0.139", default-features = false }
-sx127x_lora = "0.3.1"
+serde = { version = "1.0.142", default-features = false }
 garden-shared = { path = "../garden-shared/" }
 uom = { version = "0.33.0", default-features = false, features = [
   "f32",
@@ -44,6 +43,7 @@ uom = { version = "0.33.0", default-features = false, features = [
 ] }
 drogue-bme680 = "0.3.0"
 micromath = "2.0.0"
+embedded_radio = { git = "https://github.com/simmsb/sx127x_lora", version = "1.0.0" }
 
 
 [features]
@@ -84,6 +84,6 @@ debug = 2
 debug-assertions = false # <-
 incremental = false
 # see comment in the profile.release section
-lto = 'false'
+lto = false
 opt-level = 3           # <-
 overflow-checks = false # <-

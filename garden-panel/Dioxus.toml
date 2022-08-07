@@ -1,0 +1,48 @@
+
+[application]
+
+# App (Project) Name
+name = "garden_control"
+
+# Dioxus App Default Platform
+# desktop, web, mobile, ssr
+default_platform = "web"
+
+# `build` & `serve` dist path
+out_dir = "dist"
+
+# resource (public) file folder
+asset_dir = "public"
+
+[web.app]
+
+# HTML title tag content
+title = "Garden"
+
+[web.watcher]
+
+# when watcher trigger, regenerate the `index.html`
+reload_html = true
+
+# which files or dirs will be watcher monitoring
+watch_path = ["src", "public", "tailwind.config.js"]
+
+# include `assets` in web platform
+[web.resource]
+
+# CSS style file
+style = []
+
+# Javascript code file
+script = []
+
+[web.resource.dev]
+
+# Javascript code file
+# serve: [dev-server] only
+script = []
+
+[application.tools]
+
+tailwindcss = { input = "public/main.css", config = "tailwind.config.js" }
+binaryen = { wasm_opt = true }

@@ -1,0 +1,85 @@
+462310 execve("/home/ben/.cargo/bin/dioxus", ["dioxus", "serve"], 0x7ffff59deed0 /* 88 vars */) = 0
+462343 execve("/home/ben/.asdf/shims/cargo", ["cargo", "metadata"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462343 execve("/home/ben/.asdf/bin/cargo", ["cargo", "metadata"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462343 execve("/usr/local/sbin/cargo", ["cargo", "metadata"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462343 execve("/usr/local/bin/cargo", ["cargo", "metadata"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462343 execve("/usr/bin/cargo", ["cargo", "metadata"], 0x7ffca6c37140 /* 88 vars */) = 0
+462343 execve("/home/ben/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin/cargo", ["/home/ben/.rustup/toolchains/nig"..., "metadata"], 0x555f29abab30 /* 93 vars */) = 0
+462343 +++ exited with 0 +++
+462310 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=462343, si_uid=1000, si_status=0, si_utime=4, si_stime=2} ---
+462345 execve("/home/ben/.asdf/shims/cargo", ["cargo", "build", "--target", "wasm32-unknown-unknown", "--message-format=json", "--bin", "garden-panel"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462345 execve("/home/ben/.asdf/bin/cargo", ["cargo", "build", "--target", "wasm32-unknown-unknown", "--message-format=json", "--bin", "garden-panel"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462345 execve("/usr/local/sbin/cargo", ["cargo", "build", "--target", "wasm32-unknown-unknown", "--message-format=json", "--bin", "garden-panel"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462345 execve("/usr/local/bin/cargo", ["cargo", "build", "--target", "wasm32-unknown-unknown", "--message-format=json", "--bin", "garden-panel"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462345 execve("/usr/bin/cargo", ["cargo", "build", "--target", "wasm32-unknown-unknown", "--message-format=json", "--bin", "garden-panel"], 0x7ffca6c37140 /* 88 vars */) = 0
+462345 execve("/home/ben/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/bin/cargo", ["/home/ben/.rustup/toolchains/nig"..., "build", "--target", "wasm32-unknown-unknown", "--message-format=json", "--bin", "garden-panel"], 0x55ad0fdf27d0 /* 93 vars */) = 0
+462346 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_TKILL, si_pid=462345, si_uid=1000} ---
+462346 +++ exited with 0 +++
+462345 +++ exited with 0 +++
+462310 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=462345, si_uid=1000, si_status=0, si_utime=4, si_stime=2} ---
+462344 +++ exited with 0 +++
+462347 execve("/home/ben/.local/share/dioxus/tools/tailwindcss/./tailwindcss", ["/home/ben/.local/share/dioxus/to"..., "-i", "public/main.css", "-o", "dist/tailwind.css", "-c", "tailwind.config.js"], 0x7ffca6c37140 /* 88 vars */) = 0
+462347 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+462310 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+462350 +++ exited with 0 +++
+462352 +++ exited with 0 +++
+462351 +++ exited with 0 +++
+462348 +++ exited with 0 +++
+462349 +++ exited with 0 +++
+462418 +++ exited with 0 +++
+462419 +++ exited with 0 +++
+462417 +++ exited with 0 +++
+462416 +++ exited with 0 +++
+462347 +++ exited with 0 +++
+462310 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=462347, si_uid=1000, si_status=0, si_utime=55, si_stime=17} ---
+462473 execve("/home/ben/.asdf/shims/clear", ["clear"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462473 execve("/home/ben/.asdf/bin/clear", ["clear"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462473 execve("/usr/local/sbin/clear", ["clear"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462473 execve("/usr/local/bin/clear", ["clear"], 0x7ffca6c37140 /* 88 vars */) = -1 ENOENT (No such file or directory)
+462473 execve("/usr/bin/clear", ["clear"], 0x7ffca6c37140 /* 88 vars */) = 0
+462473 +++ exited with 0 +++
+462310 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=462473, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+462310 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+462310 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+462310 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+462310 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+462310 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+463050 +++ exited with 0 +++
+462310 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+462310 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+462310 --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+462310 --- SIGINT {si_signo=SIGINT, si_code=SI_KERNEL} ---
+462472 +++ killed by SIGINT +++
+462342 +++ killed by SIGINT +++
+462341 +++ killed by SIGINT +++
+462340 +++ killed by SIGINT +++
+462339 +++ killed by SIGINT +++
+462338 +++ killed by SIGINT +++
+462337 +++ killed by SIGINT +++
+462336 +++ killed by SIGINT +++
+462335 +++ killed by SIGINT +++
+462334 +++ killed by SIGINT +++
+462333 +++ killed by SIGINT +++
+462332 +++ killed by SIGINT +++
+462331 +++ killed by SIGINT +++
+462330 +++ killed by SIGINT +++
+462329 +++ killed by SIGINT +++
+462328 +++ killed by SIGINT +++
+462327 +++ killed by SIGINT +++
+462326 +++ killed by SIGINT +++
+462325 +++ killed by SIGINT +++
+462324 +++ killed by SIGINT +++
+462323 +++ killed by SIGINT +++
+462322 +++ killed by SIGINT +++
+462321 +++ killed by SIGINT +++
+462320 +++ killed by SIGINT +++
+462319 +++ killed by SIGINT +++
+462317 +++ killed by SIGINT +++
+462316 +++ killed by SIGINT +++
+462315 +++ killed by SIGINT +++
+462314 +++ killed by SIGINT +++
+462313 +++ killed by SIGINT +++
+462312 +++ killed by SIGINT +++
+462311 +++ killed by SIGINT +++
+462318 +++ killed by SIGINT +++
+462310 +++ killed by SIGINT +++

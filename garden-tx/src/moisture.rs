@@ -101,7 +101,7 @@ where
     }
 
     pub fn step_state(&mut self, eic: &mut EIC, now: Instant) -> Duration {
-        const BETWEEN_MEASUREMENTS_DELAY: Duration = Duration::secs(6);
+        const BETWEEN_MEASUREMENTS_DELAY: Duration = Duration::secs(60);
         const BETWEEN_READINGS_DELAY: Duration = Duration::secs(1);
 
         let (new_state, next_step_delay) = match self.state {

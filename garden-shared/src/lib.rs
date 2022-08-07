@@ -12,7 +12,7 @@ use uom::si::{
     thermodynamic_temperature::degree_celsius,
 };
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
 pub struct DevAddr(pub u16);
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -58,10 +58,32 @@ impl BME688SensorReport {
     }
 }
 
+bitflags::bitflags! {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    pub struct StatusFlags: u8 {
+        const PUMP_ON    = 0b01;
+        const VALVE_OPEN = 0b10;
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
+pub struct DeviceStatus {
+    pub flags: StatusFlags,
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub enum Message {
     MoistureReport(MoistureSensorReport),
     BME688Report(BME688SensorReport),
+    StatusUpdate(DeviceStatus),
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+pub enum Command {
+    PumpOn,
+    PumpOff,
+    ValveOpen,
+    ValveClose,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]

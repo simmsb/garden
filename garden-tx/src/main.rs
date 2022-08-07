@@ -1,14 +1,19 @@
 #![no_std]
 #![no_main]
 
-use atsamd_hal::delay::Delay;
-use atsamd_hal::gpio::{Pin, PushPullOutput, PA06, PA08};
+use atsamd_hal::gpio::{Pin, PushPullOutput, PA06, PA08, PA16, PA18};
 use garden as _;
 
 use feather_m0 as bsp;
+use garden_shared::StatusFlags;
 
-type LoRa =
-    sx127x_lora::LoRa<bsp::Spi, Pin<PA06, PushPullOutput>, Pin<PA08, PushPullOutput>, Delay>;
+type LoRa = embedded_radio::LoRa<bsp::Spi, Pin<PA06, PushPullOutput>, Pin<PA08, PushPullOutput>>;
+
+pub struct DeviceStatus {
+    flags: StatusFlags,
+    valve_pin: Pin<PA18, PushPullOutput>,
+    pump_pin: Pin<PA16, PushPullOutput>,
+}
 
 #[rtic::app(device = bsp::pac, peripherals = true, dispatchers = [EVSYS, USB])]
 mod app {
@@ -25,8 +30,9 @@ mod app {
         timer::{TimerCounter, TimerCounter5},
     };
     use bsp::{i2c_master, periph_alias, pin_alias};
+    use embedded_radio::sx127x_lora::RadioMode;
     use garden::{bme688::Bme688, moisture::Moisture};
-    use garden_shared::{DevAddr, Message, Transmission};
+    use garden_shared::{Command, DevAddr, Message, Transmission};
 
     static TC5_FIRED: AtomicBool = AtomicBool::new(false);
 
@@ -42,6 +48,7 @@ mod app {
     #[shared]
     struct Shared {
         moisture: Moisture<3>,
+        status: DeviceStatus,
     }
 
     #[monotonic(binds = RTC, default = true)]
@@ -103,16 +110,22 @@ mod app {
             pins.miso,
         );
 
+        let tc45 = clocks.tc4_tc5(&rtc_clock_src).unwrap();
+        let timer = TimerCounter::tc5_(&tc45, p.TC5, &mut p.PM);
+        let mut lora_delay = SleepingDelay::new(timer, &TC5_FIRED);
+
         let mut lora = LoRa::new(
             spi,
             pins.rfm_cs.into_push_pull_output(),
             pins.rfm_reset.into_push_pull_output(),
             868,
-            Delay::new(core.SYST, &mut clocks),
+            &mut lora_delay,
         )
         .unwrap();
 
         lora.set_tx_power(5, 1).unwrap();
+        lora.set_mode(embedded_radio::sx127x_lora::RadioMode::Sleep)
+            .unwrap();
 
         let mut a0 = pins.a0.into_floating_ei();
         a0.sense(&mut eic, Sense::RISE);
@@ -131,18 +144,27 @@ mod app {
             pins.sda,
             pins.scl,
         );
-        let tc45 = clocks.tc4_tc5(&rtc_clock_src).unwrap();
         let bme = Bme688::new(i2c, p.TC4, &tc45, &mut p.PM);
 
-        let timer = TimerCounter::tc5_(&tc45, p.TC5, &mut p.PM);
-        let lora_delay = SleepingDelay::new(timer, &TC5_FIRED);
+        let mut valve_pin = pins.d10.into_push_pull_output();
+        let mut pump_pin = pins.d11.into_push_pull_output();
+
+        valve_pin.set_low().unwrap();
+        pump_pin.set_low().unwrap();
+
+        let status = DeviceStatus {
+            flags: StatusFlags::empty(),
+            valve_pin,
+            pump_pin,
+        };
 
         blink::spawn().unwrap();
         moisture_ticker::spawn().unwrap();
-        bme_task::spawn().unwrap();
+        bme_task::spawn_after(Duration::secs(5)).unwrap();
+        status_task::spawn_after(Duration::secs(10)).unwrap();
 
         (
-            Shared { moisture },
+            Shared { moisture, status },
             Local {
                 red_led,
                 lora,
@@ -156,20 +178,31 @@ mod app {
 
     #[task(local = [lora, lora_delay], capacity = 3)]
     fn broadcast_message(cx: broadcast_message::Context, msg: Message) {
+        use embedded_radio::EmbeddedRadio;
+
+        let addr = DevAddr(0x69);
+        let addr_recv = DevAddr(69);
+
         let mut buffer = [0; 255];
 
-        let trans = Transmission {
-            src: DevAddr(0x69),
-            msg,
-        };
+        let trans = Transmission { src: addr, msg };
 
         let s = postcard::to_slice(&trans, &mut buffer).unwrap();
-        let len = s.len();
 
-        cx.local.lora.transmit_payload(buffer, len).unwrap();
+        cx.local.lora.transmit_payload_busy(s).unwrap();
+
+        if let Ok(Some(msg)) = cx.local.lora.read_packet_timeout(500, cx.local.lora_delay) {
+            if let Ok(cmd) = postcard::from_bytes::<Transmission<Command>>(&msg) {
+                if cmd.src == addr_recv {
+                    let _ = handle_msg::spawn(cmd.msg);
+                }
+            }
+        }
+
+        cx.local.lora.set_mode(RadioMode::Sleep).unwrap();
 
         // ensure we leave a gap between transmissions
-        cx.local.lora_delay.delay_ms(200u32);
+        cx.local.lora_delay.delay_ms(50u32);
     }
 
     #[task(local = [bme], priority = 1)]
@@ -178,7 +211,17 @@ mod app {
             let _ = broadcast_message::spawn(Message::BME688Report(reading));
         }
 
-        let _ = bme_task::spawn_after(Duration::secs(10));
+        let _ = bme_task::spawn_after(Duration::secs(60));
+    }
+
+    #[task(shared = [status], priority = 1)]
+    fn status_task(mut cx: status_task::Context) {
+        let flags = cx.shared.status.lock(|s| s.flags);
+
+        let _ =
+            broadcast_message::spawn(Message::StatusUpdate(garden_shared::DeviceStatus { flags }));
+
+        let _ = status_task::spawn_after(Duration::secs(60));
     }
 
     #[task(shared = [moisture], local = [eic], priority = 2)]
@@ -207,6 +250,34 @@ mod app {
         cx.local.red_led.toggle().unwrap();
 
         let _ = blink::spawn_after(Duration::secs(1));
+    }
+
+    #[task(shared = [status], capacity = 3)]
+    fn handle_msg(mut cx: handle_msg::Context, cmd: Command) {
+        let flags = cx.shared.status.lock(|s| {
+            match cmd {
+                Command::PumpOn => {
+                    s.pump_pin.set_high().unwrap();
+                    s.flags.set(StatusFlags::PUMP_ON, true);
+                }
+                Command::PumpOff => {
+                    s.pump_pin.set_low().unwrap();
+                    s.flags.set(StatusFlags::PUMP_ON, true);
+                }
+                Command::ValveOpen => {
+                    s.valve_pin.set_high().unwrap();
+                    s.flags.set(StatusFlags::VALVE_OPEN, true);
+                }
+                Command::ValveClose => {
+                    s.valve_pin.set_low().unwrap();
+                    s.flags.set(StatusFlags::VALVE_OPEN, false);
+                }
+            };
+            s.flags
+        });
+
+        let _ =
+            broadcast_message::spawn(Message::StatusUpdate(garden_shared::DeviceStatus { flags }));
     }
 
     #[task(priority = 3, binds = EIC, shared = [moisture])]
