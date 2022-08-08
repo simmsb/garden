@@ -40,7 +40,9 @@ async fn main() -> Result<()> {
         .route("/ws", get(root_ws))
         .route("/", get(|| async { Redirect::to("/index.html") }))
         .fallback(asset_router)
-        .layer(Extension(State { status_recv }));
+        .layer(Extension(State { status_recv }))
+        .layer(tower_http::compression::CompressionLayer::new())
+        .layer(tower_http::set_header::SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=300")));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     axum::Server::bind(&addr)
