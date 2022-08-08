@@ -7,7 +7,7 @@ use std::time::SystemTime;
 use chrono::{DateTime, Local};
 use dioxus::prelude::*;
 use fermi::{use_atom_state, use_init_atom_root, use_read, use_set, Atom};
-use garden_shared::{Command, DeviceStatus, PanelMessage, StatusFlags};
+use garden_shared::{DeviceStatus, PanelMessage, StatusFlags, UiCommand};
 use serde::{Deserialize, Serialize};
 use websocket_hook::{use_ws_context, use_ws_context_provider_json, DioxusWs};
 
@@ -40,6 +40,8 @@ fn app(cx: Scope) -> Element {
 
     let pump_status = use_ref(&cx, || None::<bool>);
     let valve_status = use_ref(&cx, || None::<bool>);
+    let desired_pump_status = use_ref(&cx, || None::<bool>);
+    let desired_valve_status = use_ref(&cx, || None::<bool>);
     let log = use_ref(&cx, || vec![]);
 
     let url = web_sys::window().unwrap().location().origin().unwrap();
@@ -52,6 +54,8 @@ fn app(cx: Scope) -> Element {
     use_ws_context_provider_json(&cx, url.as_ref(), {
         let pump_status = pump_status.clone();
         let valve_status = valve_status.clone();
+        let desired_pump_status = desired_pump_status.clone();
+        let desired_valve_status = desired_valve_status.clone();
         let log = log.clone();
         move |msg: PanelMessage| {
             log::info!("Got message: {:?}", msg);
@@ -81,6 +85,17 @@ fn app(cx: Scope) -> Element {
 
                     log.with_mut(|x| x.extend(to_add));
                 }
+                PanelMessage::DesiredStatus(flags) => {
+                    let pump_on = flags.contains(StatusFlags::PUMP_ON);
+                    if *desired_pump_status.read() != Some(pump_on) {
+                        desired_pump_status.set(Some(pump_on));
+                    }
+
+                    let valve_on = flags.contains(StatusFlags::VALVE_OPEN);
+                    if *desired_valve_status.read() != Some(valve_on) {
+                        desired_valve_status.set(Some(valve_on));
+                    }
+                }
                 PanelMessage::Hello => {}
             }
         }
@@ -89,6 +104,8 @@ fn app(cx: Scope) -> Element {
     cx.render(rsx!(ResponseDisplay {
         pump_status: pump_status.clone(),
         valve_status: valve_status.clone(),
+        desired_pump_status: desired_pump_status.clone(),
+        desired_valve_status: desired_valve_status.clone(),
         log: log.clone(),
     }))
 }
@@ -98,6 +115,8 @@ fn ResponseDisplay(
     cx: Scope,
     pump_status: UseRef<Option<bool>>,
     valve_status: UseRef<Option<bool>>,
+    desired_pump_status: UseRef<Option<bool>>,
+    desired_valve_status: UseRef<Option<bool>>,
     log: UseRef<Vec<LogEntry>>,
 ) -> Element {
     let ws = use_ws_context(&cx);
@@ -106,7 +125,7 @@ fn ResponseDisplay(
             log.with_mut(|x| {
                 x.push(LogEntry::new("Enqueued pump ON msg"));
             });
-            ws.send_json(&Command::PumpOn)
+            ws.send_json(&UiCommand::PumpOn)
         }
     })(ws.clone());
     let pump_off = (|ws: DioxusWs| {
@@ -114,7 +133,7 @@ fn ResponseDisplay(
             log.with_mut(|x| {
                 x.push(LogEntry::new("Enqueued pump OFF msg"));
             });
-            ws.send_json(&Command::PumpOff)
+            ws.send_json(&UiCommand::PumpOff)
         }
     })(ws.clone());
     let valve_on = (|ws: DioxusWs| {
@@ -122,7 +141,7 @@ fn ResponseDisplay(
             log.with_mut(|x| {
                 x.push(LogEntry::new("Enqueued Valve OPEN msg"));
             });
-            ws.send_json(&Command::ValveOpen)
+            ws.send_json(&UiCommand::ValveOpen)
         }
     })(ws.clone());
     let valve_off = (|ws: DioxusWs| {
@@ -130,7 +149,7 @@ fn ResponseDisplay(
             log.with_mut(|x| {
                 x.push(LogEntry::new("Enqueued Valve CLOSE msg"));
             });
-            ws.send_json(&Command::ValveClose)
+            ws.send_json(&UiCommand::ValveClose)
         }
     })(ws.clone());
 
@@ -164,6 +183,7 @@ fn ResponseDisplay(
                 }
                 PumpStatus {
                     pump_status: pump_status.clone(),
+                    desired_pump_status: desired_pump_status.clone(),
                 }
             }
             div {
@@ -180,6 +200,7 @@ fn ResponseDisplay(
                 }
                 ValveStatus {
                     valve_status: valve_status.clone()
+                    desired_valve_status: desired_valve_status.clone()
                 }
             }
             CommandLog { log: log.clone() }
@@ -217,21 +238,39 @@ fn CommandLog(cx: Scope, log: UseRef<Vec<LogEntry>>) -> Element {
 }
 
 #[inline_props]
-fn PumpStatus(cx: Scope, pump_status: UseRef<Option<bool>>) -> Element {
+fn PumpStatus(
+    cx: Scope,
+    pump_status: UseRef<Option<bool>>,
+    desired_pump_status: UseRef<Option<bool>>,
+) -> Element {
     let pump_status = match *pump_status.read() {
         Some(true) => "On ✅",
         Some(false) => "Off ❌",
         None => "Unknown",
     };
-    cx.render(rsx!(span { "Pump Status: {pump_status}" }))
+    let desired_pump_status = match *desired_pump_status.read() {
+        Some(true) => "On ✅",
+        Some(false) => "Off ❌",
+        None => "Unknown",
+    };
+    cx.render(rsx!(span { "Pump Status: {pump_status} (desired: {desired_pump_status})" }))
 }
 
 #[inline_props]
-fn ValveStatus(cx: Scope, valve_status: UseRef<Option<bool>>) -> Element {
+fn ValveStatus(
+    cx: Scope,
+    valve_status: UseRef<Option<bool>>,
+    desired_valve_status: UseRef<Option<bool>>,
+) -> Element {
     let valve_status = match *valve_status.read() {
         Some(true) => "On ✅",
         Some(false) => "Off ❌",
         None => "Unknown",
     };
-    cx.render(rsx!(span { "Valve Status: {valve_status}" }))
+    let desired_valve_status = match *desired_valve_status.read() {
+        Some(true) => "On ✅",
+        Some(false) => "Off ❌",
+        None => "Unknown",
+    };
+    cx.render(rsx!(span { "Valve Status: {valve_status} (desired: {desired_valve_status})" }))
 }

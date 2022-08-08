@@ -43,7 +43,11 @@ uom = { version = "0.33.0", default-features = false, features = [
 ] }
 drogue-bme680 = "0.3.0"
 micromath = "2.0.0"
-embedded_radio = { git = "https://github.com/simmsb/sx127x_lora", version = "1.0.0" }
+embedded-hal-compat = "0.6.0"
+embedded-hal = "=1.0.0-alpha.7"
+radio-sx127x = { version = "0.14.0", default-features = false }
+radio = "0.11.1"
+# embedded_radio = { git = "https://github.com/simmsb/sx127x_lora", version = "1.0.0" }
 
 
 [features]

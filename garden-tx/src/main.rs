@@ -1,13 +1,107 @@
 #![no_std]
 #![no_main]
 
-use atsamd_hal::gpio::{Pin, PushPullOutput, PA06, PA08, PA16, PA18};
+use atsamd_hal::delay::Delay;
+use atsamd_hal::gpio::{
+    FloatingInput, Pin, PushPullOutput, ReadableOutput, PA06, PA08, PA09, PA16, PA18, PA19,
+};
 use garden as _;
 
 use feather_m0 as bsp;
 use garden_shared::StatusFlags;
+use radio::{Receive, Transmit};
+use radio_sx127x::base::Base;
 
-type LoRa = embedded_radio::LoRa<bsp::Spi, Pin<PA06, PushPullOutput>, Pin<PA08, PushPullOutput>>;
+use embedded_hal_compat::{Forward, ForwardCompat};
+use radio_sx127x::device::lora::{
+    Bandwidth, CodingRate, FrequencyHopping, PayloadCrc, PayloadLength, SpreadingFactor,
+};
+use radio_sx127x::device::{Channel, Modem, PaConfig, PaSelect};
+use radio_sx127x::prelude::{LoRaChannel, LoRaConfig};
+
+type LoRa = radio_sx127x::Sx127x<
+    Base<
+        TransferInPlaceFwd<Forward<bsp::Spi>>,
+        // cs
+        Forward<Pin<PA06, ReadableOutput>>,
+        // irq / busy
+        Forward<Pin<PA09, FloatingInput>>,
+        // d12, ready
+        Forward<Pin<PA19, FloatingInput>>,
+        // reset
+        Forward<Pin<PA08, ReadableOutput>>,
+        Forward<Delay>,
+    >,
+>;
+
+pub struct TransferInPlaceFwd<T>(pub T);
+
+impl<T> embedded_hal_compat::eh1_0::spi::ErrorType for TransferInPlaceFwd<T>
+where
+    T: embedded_hal_compat::eh1_0::spi::ErrorType,
+{
+    type Error = T::Error;
+}
+
+impl<T> embedded_hal_compat::eh1_0::spi::blocking::Write<u8> for TransferInPlaceFwd<T>
+where
+    T: embedded_hal_compat::eh1_0::spi::blocking::Write<u8>,
+{
+    fn write(&mut self, words: &[u8]) -> Result<(), Self::Error> {
+        self.0.write(words)
+    }
+}
+
+impl<T> embedded_hal_compat::eh1_0::spi::blocking::Transactional<u8> for TransferInPlaceFwd<T>
+where
+    T: embedded_hal_compat::eh1_0::spi::blocking::Transactional<u8>,
+{
+    fn exec<'a>(
+        &mut self,
+        operations: &mut [embedded_hal::spi::blocking::Operation<'a, u8>],
+    ) -> Result<(), Self::Error> {
+        self.0.exec(operations)
+    }
+}
+impl<T> embedded_hal_compat::eh1_0::spi::blocking::TransferInplace<u8> for TransferInPlaceFwd<T>
+where
+    T: embedded_hal_compat::eh1_0::spi::blocking::Transactional<u8>,
+{
+    fn transfer_inplace(&mut self, words: &mut [u8]) -> Result<(), Self::Error> {
+        self.0.exec(&mut [
+            embedded_hal_compat::eh1_0::spi::blocking::Operation::TransferInplace(words),
+        ])
+    }
+}
+
+const CONFIG_CH: LoRaChannel = LoRaChannel {
+    freq: 868_000_000,
+    bw: Bandwidth::Bw125kHz,
+    sf: SpreadingFactor::Sf7,
+    cr: CodingRate::Cr4_8,
+};
+
+const CONFIG_LORA: LoRaConfig = LoRaConfig {
+    preamble_len: 0x8,
+    symbol_timeout: 0x64,
+    payload_len: PayloadLength::Variable,
+    payload_crc: PayloadCrc::Enabled,
+    frequency_hop: FrequencyHopping::Disabled,
+    invert_iq: false,
+};
+
+const CONFIG_PA: PaConfig = PaConfig {
+    output: PaSelect::Boost,
+    power: 10,
+};
+
+const CONFIG_RADIO: radio_sx127x::device::Config = radio_sx127x::device::Config {
+    modem: Modem::LoRa(CONFIG_LORA),
+    channel: Channel::LoRa(CONFIG_CH),
+    pa_config: CONFIG_PA,
+    xtal_freq: 32_000_000,
+    timeout_ms: 100,
+};
 
 pub struct DeviceStatus {
     flags: StatusFlags,
@@ -30,7 +124,6 @@ mod app {
         timer::{TimerCounter, TimerCounter5},
     };
     use bsp::{i2c_master, periph_alias, pin_alias};
-    use embedded_radio::sx127x_lora::RadioMode;
     use garden::{bme688::Bme688, moisture::Moisture};
     use garden_shared::{Command, DevAddr, Message, Transmission};
 
@@ -112,20 +205,19 @@ mod app {
 
         let tc45 = clocks.tc4_tc5(&rtc_clock_src).unwrap();
         let timer = TimerCounter::tc5_(&tc45, p.TC5, &mut p.PM);
-        let mut lora_delay = SleepingDelay::new(timer, &TC5_FIRED);
+        let lora_delay = SleepingDelay::new(timer, &TC5_FIRED);
+        let delay = Delay::new(core.SYST, &mut clocks);
 
-        let mut lora = LoRa::new(
-            spi,
-            pins.rfm_cs.into_push_pull_output(),
-            pins.rfm_reset.into_push_pull_output(),
-            868,
-            &mut lora_delay,
+        let lora = radio_sx127x::Sx127x::spi(
+            TransferInPlaceFwd(spi.forward()),
+            pins.rfm_cs.into_readable_output().forward(),
+            pins.rfm_irq.into_floating_input().forward(),
+            pins.d12.into_floating_input().forward(),
+            pins.rfm_reset.into_readable_output().forward(),
+            delay.forward(),
+            &CONFIG_RADIO,
         )
         .unwrap();
-
-        lora.set_tx_power(5, 1).unwrap();
-        lora.set_mode(embedded_radio::sx127x_lora::RadioMode::Sleep)
-            .unwrap();
 
         let mut a0 = pins.a0.into_floating_ei();
         a0.sense(&mut eic, Sense::RISE);
@@ -158,8 +250,7 @@ mod app {
             pump_pin,
         };
 
-        blink::spawn().unwrap();
-        moisture_ticker::spawn().unwrap();
+        moisture_ticker::spawn_after(Duration::secs(3)).unwrap();
         bme_task::spawn_after(Duration::secs(5)).unwrap();
         status_task::spawn_after(Duration::secs(10)).unwrap();
 
@@ -176,10 +267,8 @@ mod app {
         )
     }
 
-    #[task(local = [lora, lora_delay], capacity = 3)]
+    #[task(local = [lora, lora_delay, red_led], capacity = 3)]
     fn broadcast_message(cx: broadcast_message::Context, msg: Message) {
-        use embedded_radio::EmbeddedRadio;
-
         let addr = DevAddr(0x69);
         let addr_recv = DevAddr(69);
 
@@ -189,20 +278,54 @@ mod app {
 
         let s = postcard::to_slice(&trans, &mut buffer).unwrap();
 
-        cx.local.lora.transmit_payload_busy(s).unwrap();
+        cx.local.red_led.set_high().unwrap();
+        cx.local.lora.start_transmit(s).unwrap();
 
-        if let Ok(Some(msg)) = cx.local.lora.read_packet_timeout(500, cx.local.lora_delay) {
-            if let Ok(cmd) = postcard::from_bytes::<Transmission<Command>>(&msg) {
-                if cmd.src == addr_recv {
-                    let _ = handle_msg::spawn(cmd.msg);
-                }
+        loop {
+            if !matches!(cx.local.lora.check_transmit(), Ok(false)) {
+                break;
             }
+
+            cx.local.lora_delay.delay_ms(10u32);
         }
 
-        cx.local.lora.set_mode(RadioMode::Sleep).unwrap();
+        cx.local.red_led.set_low().unwrap();
 
-        // ensure we leave a gap between transmissions
+        cx.local.lora.start_receive().unwrap();
+
+        for _ in 0..50 {
+            match cx.local.lora.check_receive(true) {
+                Ok(true) => {
+                    if let Ok((n, _)) = cx.local.lora.get_received(&mut buffer) {
+                        if let Ok(cmd) = postcard::from_bytes::<Transmission<Command>>(&buffer[..n])
+                        {
+                            if cmd.src == addr_recv {
+                                let _ = handle_msg::spawn(cmd.msg);
+                            }
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                Ok(false) => {}
+                Err(_) => {
+                    break;
+                }
+            }
+
+            cx.local.lora_delay.delay_ms(10u32);
+        }
+
+        let _ = cx.local.lora.reset();
+        let _ = cx.local.lora.configure(&CONFIG_RADIO);
+
+        // if let Ok(Some(msg)) = cx.local.lora.read_packet_timeout(500, cx.local.lora_delay) {
+        // }
+
+        // // ensure we leave a gap between transmissions
+        cx.local.red_led.set_high().unwrap();
         cx.local.lora_delay.delay_ms(50u32);
+        cx.local.red_led.set_low().unwrap();
     }
 
     #[task(local = [bme], priority = 1)]
@@ -221,7 +344,7 @@ mod app {
         let _ =
             broadcast_message::spawn(Message::StatusUpdate(garden_shared::DeviceStatus { flags }));
 
-        let _ = status_task::spawn_after(Duration::secs(60));
+        let _ = status_task::spawn_after(Duration::secs(10));
     }
 
     #[task(shared = [moisture], local = [eic], priority = 2)]
@@ -245,32 +368,16 @@ mod app {
         let _ = moisture_ticker::spawn_after(delay);
     }
 
-    #[task(local = [red_led])]
-    fn blink(cx: blink::Context) {
-        cx.local.red_led.toggle().unwrap();
-
-        let _ = blink::spawn_after(Duration::secs(1));
-    }
-
     #[task(shared = [status], capacity = 3)]
     fn handle_msg(mut cx: handle_msg::Context, cmd: Command) {
         let flags = cx.shared.status.lock(|s| {
             match cmd {
-                Command::PumpOn => {
-                    s.pump_pin.set_high().unwrap();
-                    s.flags.set(StatusFlags::PUMP_ON, true);
-                }
-                Command::PumpOff => {
-                    s.pump_pin.set_low().unwrap();
-                    s.flags.set(StatusFlags::PUMP_ON, true);
-                }
-                Command::ValveOpen => {
-                    s.valve_pin.set_high().unwrap();
-                    s.flags.set(StatusFlags::VALVE_OPEN, true);
-                }
-                Command::ValveClose => {
-                    s.valve_pin.set_low().unwrap();
-                    s.flags.set(StatusFlags::VALVE_OPEN, false);
+                Command::SyncFlags(flags) => {
+                    let pump_state = flags.contains(StatusFlags::PUMP_ON);
+                    let valve_state = flags.contains(StatusFlags::VALVE_OPEN);
+                    s.pump_pin.set_state(pump_state.into()).unwrap();
+                    s.valve_pin.set_state(valve_state.into()).unwrap();
+                    s.flags = flags;
                 }
             };
             s.flags

@@ -1,10 +1,12 @@
 use std::collections::HashMap;
+use std::sync::Mutex;
 
-use tokio::sync::mpsc::Receiver;
 use color_eyre::Result;
 use embedded_radio::EmbeddedRadio;
 use filter::kalman::kalman_filter::KalmanFilter;
-use garden_shared::{BME688SensorReport, Command, DevAddr, DeviceStatus, Message, Transmission};
+use garden_shared::{
+    BME688SensorReport, Command, DevAddr, DeviceStatus, Message, StatusFlags, Transmission,
+};
 use linux_embedded_hal as hal;
 
 use hal::spidev::{self, SpidevOptions};
@@ -56,10 +58,9 @@ static GAS_RESISTANCE: Lazy<Gauge> = Lazy::new(|| {
         .unwrap()
 });
 
-pub fn radio_side(
-    cmd_out: Receiver<Command>,
-    status_sender: watch::Sender<Option<DeviceStatus>>,
-) -> Result<()> {
+pub static DESIRED_STATE: Lazy<Mutex<StatusFlags>> = Lazy::new(|| Mutex::new(StatusFlags::empty()));
+
+pub fn radio_side(status_sender: watch::Sender<Option<DeviceStatus>>) -> Result<()> {
     color_eyre::install()?;
 
     let mut spi = Spidev::open("/dev/spidev0.1").unwrap();
@@ -81,8 +82,11 @@ pub fn radio_side(
 
     let mut lora = embedded_radio::LoRa::new(spi, cs, reset, FREQUENCY, &mut Delay)
         .expect("Failed to communicate with radio module!");
+    lora.set_tx_power(17, 1).unwrap();
 
-    let mut exporter = Exporter::new(cmd_out, status_sender);
+    let mut exporter = Exporter::new(status_sender);
+
+    println!("Radio initialized");
 
     loop {
         match exporter.inner(&mut lora) {
@@ -100,12 +104,11 @@ struct Exporter {
     pressure_filter: KalmanFilter<f32, U1, U1, U1>,
     moisture_filters: [KalmanFilter<f32, U1, U1, U1>; 3],
     last_reading: Option<BME688SensorReport>,
-    command_queue: Receiver<Command>,
     status_sender: watch::Sender<Option<DeviceStatus>>,
 }
 
 impl Exporter {
-    fn new(command_queue: Receiver<Command>, status_sender: watch::Sender<Option<DeviceStatus>>) -> Self {
+    fn new(status_sender: watch::Sender<Option<DeviceStatus>>) -> Self {
         let mut temp_filter = KalmanFilter::default();
         temp_filter.x = Vector1::new(19.0);
         temp_filter.H = Vector1::new(1.0);
@@ -136,7 +139,6 @@ impl Exporter {
             pressure_filter,
             moisture_filters,
             last_reading: None,
-            command_queue,
             status_sender,
         }
     }
@@ -218,19 +220,27 @@ impl Exporter {
             let msg: Transmission<Message> = postcard::from_bytes(&buffer)?;
 
             if msg.src != DevAddr(0x69) {
+                println!("Discarding transmission (wrong src addr) {:?}", msg);
                 return Ok(());
             }
 
-            if let Ok(cmd) = self.command_queue.try_recv() {
-                let t = Transmission {
-                    src: DevAddr(69),
-                    msg: cmd,
-                };
+            if let Message::StatusUpdate(upd) = msg.msg {
+                let desired_status = *DESIRED_STATE.lock().unwrap();
+                if upd.flags != desired_status {
+                    let t = Transmission {
+                        src: DevAddr(69),
+                        msg: Command::SyncFlags(desired_status),
+                    };
 
-                let ser = postcard::to_stdvec(&t).unwrap();
+                    std::thread::sleep(std::time::Duration::from_millis(10));
 
-                lora.transmit_payload(&ser)
-                    .map_err(|e| color_eyre::eyre::eyre!("Opps: {:?}", e))?;
+                    let ser = postcard::to_stdvec(&t).unwrap();
+
+                    println!("Transmitting command: {:?}", t);
+
+                    lora.transmit_payload(&ser)
+                        .map_err(|e| color_eyre::eyre::eyre!("Opps: {:?}", e))?;
+                }
             }
 
             println!("msg: {:?}", msg);

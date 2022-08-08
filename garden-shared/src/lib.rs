@@ -80,6 +80,11 @@ pub enum Message {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 pub enum Command {
+    SyncFlags(StatusFlags),
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
+pub enum UiCommand {
     PumpOn,
     PumpOff,
     ValveOpen,
@@ -96,4 +101,5 @@ pub struct Transmission<T> {
 pub enum PanelMessage {
     Hello,
     Status(DeviceStatus),
+    DesiredStatus(StatusFlags),
 }

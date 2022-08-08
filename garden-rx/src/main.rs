@@ -8,12 +8,13 @@ use axum::response::{IntoResponse, Redirect};
 use axum::routing::get;
 use axum::{Extension, Router};
 use color_eyre::Result;
-use garden_shared::{Command, DeviceStatus, PanelMessage};
+use garden_shared::{DeviceStatus, PanelMessage, StatusFlags, UiCommand};
 use include_dir::{include_dir, Dir};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::watch;
 use tokio_stream::StreamExt;
 
-#[cfg(not(feature = "testing_echo"))]
+use crate::radio::DESIRED_STATE;
+
 mod radio;
 
 static PANEL_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../garden-panel/dist");
@@ -21,32 +22,25 @@ static PANEL_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../garden-panel/di
 #[derive(Clone)]
 struct State {
     status_recv: watch::Receiver<Option<DeviceStatus>>,
-    cmd_in: mpsc::Sender<Command>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let (cmd_in, cmd_out) = tokio::sync::mpsc::channel(10);
     let (status_sender, status_recv) = watch::channel(None);
 
-    #[cfg(not(feature = "testing_echo"))]
     std::thread::spawn(|| {
-        if let Err(e) = radio::radio_side(cmd_out, status_sender) {
+        if let Err(e) = radio::radio_side(status_sender) {
             println!("{:?}", e);
         }
     });
 
-    let asset_router = Router::new()
-        .route("/*path", get(static_path));
+    let asset_router = Router::new().route("/*path", get(static_path));
 
     let app = Router::new()
         .route("/ws", get(root_ws))
         .route("/", get(|| async { Redirect::to("/index.html") }))
         .fallback(asset_router)
-        .layer(Extension(State {
-            cmd_in,
-            status_recv,
-        }));
+        .layer(Extension(State { status_recv }));
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     axum::Server::bind(&addr)
@@ -87,31 +81,26 @@ async fn root_ws(ws: WebSocketUpgrade, Extension(state): Extension<State>) -> im
 }
 
 async fn handle_socket(mut socket: WebSocket, mut state: State) -> Result<()> {
-    #[cfg(feature = "testing_echo")]
-    let mut status = {
-        use garden_shared::StatusFlags;
-
-        DeviceStatus {
-            flags: StatusFlags::empty(),
-        }
-    };
-
     println!("Websocket connected!");
 
     socket
-        .send(axum::extract::ws::Message::Text(
+        .send(Message::Text(
             serde_json::to_string(&PanelMessage::Hello).unwrap(),
         ))
         .await?;
 
     let v = state.status_recv.borrow_and_update().clone();
     if let Some(v) = v {
+        let c = PanelMessage::Status(v);
         socket
-            .send(axum::extract::ws::Message::Text(
-                serde_json::to_string(&v).unwrap(),
-            ))
+            .send(Message::Text(serde_json::to_string(&c).unwrap()))
             .await?;
     }
+
+    let c = PanelMessage::DesiredStatus(*DESIRED_STATE.lock().unwrap());
+    socket
+        .send(Message::Text(serde_json::to_string(&c).unwrap()))
+        .await?;
 
     let mut status_stream = tokio_stream::wrappers::WatchStream::new(state.status_recv);
 
@@ -121,7 +110,7 @@ async fn handle_socket(mut socket: WebSocket, mut state: State) -> Result<()> {
                 println!("Got status message: {:?}", v);
                 if let Some(Some(v)) = v {
                     socket
-                        .send(axum::extract::ws::Message::Text(
+                        .send(Message::Text(
                             serde_json::to_string(&PanelMessage::Status(v)).unwrap(),
                         ))
                         .await?;
@@ -136,37 +125,35 @@ async fn handle_socket(mut socket: WebSocket, mut state: State) -> Result<()> {
                     match cmd {
                         Message::Text(t) => {
                             println!("got message: {}", t);
-                            let cmd: Command = serde_json::from_str(&t)?;
+                            let cmd: UiCommand = serde_json::from_str(&t)?;
 
-                            #[cfg(not(feature = "testing_echo"))]
-                            state.cmd_in.send(cmd).await?;
-
-                            #[cfg(feature = "testing_echo")]
-                            {
-                                use garden_shared::StatusFlags;
+                            let c = {
+                                let mut desired_state = DESIRED_STATE.lock().unwrap();
 
                                 match cmd {
-                                    Command::PumpOn => {
-                                        status.flags.set(StatusFlags::PUMP_ON, true);
+                                    UiCommand::PumpOn => {
+                                        desired_state.set(StatusFlags::PUMP_ON, true);
                                     },
-                                    Command::PumpOff => {
-                                        status.flags.set(StatusFlags::PUMP_ON, false);
+                                    UiCommand::PumpOff => {
+                                        desired_state.set(StatusFlags::PUMP_ON, false);
                                     },
-                                    Command::ValveOpen => {
-                                        status.flags.set(StatusFlags::VALVE_OPEN, true);
+                                    UiCommand::ValveOpen => {
+                                        desired_state.set(StatusFlags::VALVE_OPEN, true);
                                     },
-                                    Command::ValveClose => {
-                                        status.flags.set(StatusFlags::VALVE_OPEN, false);
+                                    UiCommand::ValveClose => {
+                                        desired_state.set(StatusFlags::VALVE_OPEN, false);
                                     },
                                 }
 
-                                let resp = PanelMessage::Status(status);
-                                println!("Sending msg: {:?}", resp);
-
-                                socket.send(axum::extract::ws::Message::Text(
-                                    serde_json::to_string(&resp).unwrap()
-                                )).await?;
-                            }
+                                PanelMessage::DesiredStatus(*desired_state)
+                            };
+                            println!("Sending message {:?}", c);
+                            socket
+                                .send(Message::Text(serde_json::to_string(&c).unwrap()))
+                                .await?;
+                        }
+                        Message::Ping(msg) => {
+                            socket.send(Message::Pong(msg)).await?;
                         }
                         Message::Close(_) => {
                             println!("Closing websocket");

@@ -1,0 +1,2 @@
+[build.env]
+volumes = ["PANEL_DIR=../garden-panel/"]
