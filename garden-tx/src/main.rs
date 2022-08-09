@@ -8,6 +8,7 @@ use atsamd_hal::gpio::{
 use garden as _;
 
 use feather_m0 as bsp;
+use bsp::hal::watchdog::{Watchdog, WatchdogTimeout};
 use garden_shared::StatusFlags;
 use radio::{Receive, Transmit};
 use radio_sx127x::base::Base;
@@ -136,6 +137,7 @@ mod app {
         lora_delay: SleepingDelay<TimerCounter5>,
         eic: EIC,
         bme: Bme688,
+        wdt: Watchdog,
     }
 
     #[shared]
@@ -177,7 +179,6 @@ mod app {
             w.dmac_().clear_bit()
         });
         p.PM.apbamask.modify(|_, w| {
-            w.wdt_().clear_bit();
             w.sysctrl_().clear_bit();
             w.pac0_().clear_bit()
         });
@@ -190,7 +191,16 @@ mod app {
         });
         p.PM.apbcmask.modify(|_, w| w.adc_().clear_bit());
 
-        let red_led = pin_alias!(pins.red_led).into_push_pull_output();
+        let mut red_led = pin_alias!(pins.red_led).into_push_pull_output();
+        red_led.set_low().unwrap();
+
+        let mut wdt = Watchdog::new(p.WDT);
+        wdt.start(WatchdogTimeout::Cycles16K as u8);
+
+        let tc45 = clocks.tc4_tc5(&rtc_clock_src).unwrap();
+        let timer = TimerCounter::tc5_(&tc45, p.TC5, &mut p.PM);
+        let lora_delay = SleepingDelay::new(timer, &TC5_FIRED);
+        let delay = Delay::new(core.SYST, &mut clocks);
 
         let spi_sercom = periph_alias!(p.spi_sercom);
         let spi = bsp::spi_master(
@@ -202,11 +212,6 @@ mod app {
             pins.mosi,
             pins.miso,
         );
-
-        let tc45 = clocks.tc4_tc5(&rtc_clock_src).unwrap();
-        let timer = TimerCounter::tc5_(&tc45, p.TC5, &mut p.PM);
-        let lora_delay = SleepingDelay::new(timer, &TC5_FIRED);
-        let delay = Delay::new(core.SYST, &mut clocks);
 
         let lora = radio_sx127x::Sx127x::spi(
             TransferInPlaceFwd(spi.forward()),
@@ -253,6 +258,7 @@ mod app {
         moisture_ticker::spawn_after(Duration::secs(3)).unwrap();
         bme_task::spawn_after(Duration::secs(5)).unwrap();
         status_task::spawn_after(Duration::secs(10)).unwrap();
+        wdt_task::spawn().unwrap();
 
         (
             Shared { moisture, status },
@@ -262,6 +268,7 @@ mod app {
                 lora_delay,
                 eic,
                 bme,
+                wdt,
             },
             init::Monotonics(rtc),
         )
@@ -385,6 +392,13 @@ mod app {
 
         let _ =
             broadcast_message::spawn(Message::StatusUpdate(garden_shared::DeviceStatus { flags }));
+    }
+
+    #[task(priority = 2, local = [wdt])]
+    fn wdt_task(cx: wdt_task::Context) {
+        cx.local.wdt.feed();
+
+        let _ = wdt_task::spawn_after(Duration::millis(100));
     }
 
     #[task(priority = 3, binds = EIC, shared = [moisture])]
