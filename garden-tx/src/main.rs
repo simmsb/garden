@@ -152,6 +152,30 @@ mod app {
     #[init]
     fn init(cx: init::Context) -> (Shared, Local, init::Monotonics) {
         let mut p: Peripherals = cx.device;
+
+        // do a little dance with the brownout detector
+        p.SYSCTRL.bod33.write(|w| w.enable().clear_bit());
+        while !p.SYSCTRL.pclksr.read().b33srdy().bit_is_clear() {}
+
+        p.SYSCTRL.bod33.write(|w| {
+            unsafe { w.level().bits(48) }
+                .action()
+                .none()
+                .hyst()
+                .set_bit()
+        });
+
+        p.SYSCTRL.bod33.write(|w| w.enable().set_bit());
+        while !p.SYSCTRL.pclksr.read().bod33rdy().bit_is_set() {}
+
+        while p.SYSCTRL.pclksr.read().bod33det().bit_is_set() {}
+
+        p.SYSCTRL.bod33.write(|w| w.enable().clear_bit());
+        while !p.SYSCTRL.pclksr.read().b33srdy().bit_is_clear() {}
+
+        p.SYSCTRL.bod33.write(|w| w.action().reset());
+        p.SYSCTRL.bod33.write(|w| w.enable().set_bit());
+
         let pins = bsp::Pins::new(p.PORT);
         let mut core = cx.core;
         let mut clocks = GenericClockController::with_external_32kosc(
