@@ -15,15 +15,39 @@ use uom::si::{
 #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
 pub struct DevAddr(pub u16);
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct MoistureReading {
     pub clocks: u16,
     pub duration: Duration,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+impl MoistureReading {
+    pub fn per_second(&self) -> f32 {
+        self.clocks as f32 / self.duration.as_secs_f32()
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct MoistureSensorReport {
     pub moisture: heapless::Vec<MoistureReading, 8>,
+}
+
+impl MoistureSensorReport {
+    pub fn sanity_check(self, last: Option<&Self>) -> Option<Self> {
+        if let Some(last) = last {
+            if self.moisture.len() != last.moisture.len() {
+                return None;
+            }
+
+            for (a, b) in self.moisture.iter().zip(&last.moisture) {
+                if (a.per_second() - b.per_second()).abs() > 5.0 {
+                    return None;
+                }
+            }
+        }
+
+        Some(self)
+    }
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]

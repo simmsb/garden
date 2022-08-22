@@ -5,7 +5,8 @@ use color_eyre::Result;
 use embedded_radio::EmbeddedRadio;
 use filter::kalman::kalman_filter::KalmanFilter;
 use garden_shared::{
-    BME688SensorReport, Command, DevAddr, DeviceStatus, Message, StatusFlags, Transmission,
+    BME688SensorReport, Command, DevAddr, DeviceStatus, Message, MoistureSensorReport, StatusFlags,
+    Transmission,
 };
 use linux_embedded_hal as hal;
 
@@ -104,6 +105,7 @@ struct Exporter {
     pressure_filter: KalmanFilter<f32, U1, U1, U1>,
     moisture_filters: [KalmanFilter<f32, U1, U1, U1>; 3],
     last_reading: Option<BME688SensorReport>,
+    last_moisture_reading: Option<MoistureSensorReport>,
     status_sender: watch::Sender<Option<DeviceStatus>>,
 }
 
@@ -139,6 +141,7 @@ impl Exporter {
             pressure_filter,
             moisture_filters,
             last_reading: None,
+            last_moisture_reading: None,
             status_sender,
         }
     }
@@ -146,6 +149,11 @@ impl Exporter {
     fn submit(&mut self, msg: Message) -> Result<()> {
         match msg {
             Message::MoistureReport(r) => {
+                let r = r
+                    .sanity_check(self.last_moisture_reading.as_ref())
+                    .ok_or_else(|| color_eyre::eyre::eyre!("Invalid moisture reading"))?;
+                self.last_moisture_reading = Some(r.clone());
+
                 for (n, r) in r.moisture.into_iter().enumerate() {
                     let level = Vector1::new(r.clocks as f32 / r.duration.as_secs_f32());
                     let filter = &mut self.moisture_filters[n];
