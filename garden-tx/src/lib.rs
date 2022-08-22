@@ -8,10 +8,11 @@ pub mod bme688;
 #[cfg(feature = "debugger")]
 use defmt_rtt as _;
 
-#[cfg(feature = "debugger")]
-use panic_probe as _;
+// #[cfg(feature = "debugger")]
+// use panic_probe as _;
 
-#[cfg(feature = "debugger")]
+use panic_reset as _;
+
 use feather_m0 as _;
 
 #[defmt::panic_handler]

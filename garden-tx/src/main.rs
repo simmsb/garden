@@ -93,7 +93,7 @@ const CONFIG_LORA: LoRaConfig = LoRaConfig {
 
 const CONFIG_PA: PaConfig = PaConfig {
     output: PaSelect::Boost,
-    power: 10,
+    power: 15,
 };
 
 const CONFIG_RADIO: radio_sx127x::device::Config = radio_sx127x::device::Config {
