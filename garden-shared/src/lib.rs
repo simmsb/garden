@@ -105,6 +105,7 @@ pub enum Message {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
 pub enum Command {
     SyncFlags(StatusFlags),
+    Reset,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy)]
@@ -113,6 +114,7 @@ pub enum UiCommand {
     PumpOff,
     ValveOpen,
     ValveClose,
+    Reset,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]

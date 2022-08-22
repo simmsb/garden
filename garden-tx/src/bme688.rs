@@ -42,7 +42,7 @@ impl Bme688 {
     }
 
     pub fn read(&mut self) -> Option<BME688SensorReport> {
-        let result = self.bme.measure_default().unwrap()?;
+        let result = self.bme.measure_default().ok()??;
 
         let report = BME688SensorReport {
             temp: ThermodynamicTemperature::new::<degree_celsius>(result.temperature - 5.0),

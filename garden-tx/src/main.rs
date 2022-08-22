@@ -7,8 +7,8 @@ use atsamd_hal::gpio::{
 };
 use garden as _;
 
-use feather_m0 as bsp;
 use bsp::hal::watchdog::{Watchdog, WatchdogTimeout};
+use feather_m0 as bsp;
 use garden_shared::StatusFlags;
 use radio::{Receive, Transmit};
 use radio_sx127x::base::Base;
@@ -335,13 +335,19 @@ mod app {
         cx.local.red_led.set_low().unwrap();
     }
 
-    #[task(local = [bme], priority = 1)]
+    #[task(local = [bme, fails: u8 = 0], priority = 1)]
     fn bme_task(cx: bme_task::Context) {
         if let Some(reading) = cx.local.bme.read() {
             let _ = broadcast_message::spawn(Message::BME688Report(reading));
+            *cx.local.fails = 0;
+        } else {
+            *cx.local.fails += 1;
+            if *cx.local.fails > 4 {
+                cortex_m::peripheral::SCB::sys_reset();
+            }
         }
 
-        let _ = bme_task::spawn_after(Duration::secs(60));
+        bme_task::spawn_after(Duration::secs(60)).unwrap();
     }
 
     #[task(shared = [status], priority = 1)]
@@ -351,7 +357,7 @@ mod app {
         let _ =
             broadcast_message::spawn(Message::StatusUpdate(garden_shared::DeviceStatus { flags }));
 
-        let _ = status_task::spawn_after(Duration::secs(10));
+        status_task::spawn_after(Duration::secs(10)).unwrap();
     }
 
     #[task(shared = [moisture], local = [eic], priority = 2)]
@@ -372,7 +378,7 @@ mod app {
             let _ = broadcast_message::spawn(Message::MoistureReport(report));
         }
 
-        let _ = moisture_ticker::spawn_after(delay);
+        moisture_ticker::spawn_after(delay).unwrap();
     }
 
     #[task(shared = [status], capacity = 3)]
@@ -385,6 +391,9 @@ mod app {
                     s.pump_pin.set_state(pump_state.into()).unwrap();
                     s.valve_pin.set_state(valve_state.into()).unwrap();
                     s.flags = flags;
+                }
+                Command::Reset => {
+                    cortex_m::peripheral::SCB::sys_reset();
                 }
             };
             s.flags

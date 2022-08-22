@@ -13,12 +13,11 @@ use include_dir::{include_dir, Dir};
 use tokio::sync::watch;
 use tokio_stream::StreamExt;
 
-use crate::radio::DESIRED_STATE;
+use crate::radio::{DESIRED_STATE, RESET_WANTED};
 
 mod radio;
 
 static PANEL_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../garden-panel/dist");
-
 
 #[derive(Clone)]
 struct State {
@@ -43,7 +42,12 @@ async fn main() -> Result<()> {
         .fallback(asset_router)
         .layer(Extension(State { status_recv }))
         .layer(tower_http::compression::CompressionLayer::new())
-        .layer(tower_http::set_header::SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=300")));
+        .layer(
+            tower_http::set_header::SetResponseHeaderLayer::if_not_present(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=300"),
+            ),
+        );
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     axum::Server::bind(&addr)
@@ -146,6 +150,9 @@ async fn handle_socket(mut socket: WebSocket, mut state: State) -> Result<()> {
                                     UiCommand::ValveClose => {
                                         desired_state.set(StatusFlags::VALVE_OPEN, false);
                                     },
+                                    UiCommand::Reset => {
+                                        *RESET_WANTED.lock().unwrap() = true;
+                                    }
                                 }
 
                                 PanelMessage::DesiredStatus(*desired_state)

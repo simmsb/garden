@@ -60,6 +60,7 @@ static GAS_RESISTANCE: Lazy<Gauge> = Lazy::new(|| {
 });
 
 pub static DESIRED_STATE: Lazy<Mutex<StatusFlags>> = Lazy::new(|| Mutex::new(StatusFlags::empty()));
+pub static RESET_WANTED: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
 
 pub fn radio_side(status_sender: watch::Sender<Option<DeviceStatus>>) -> Result<()> {
     color_eyre::install()?;
@@ -230,6 +231,22 @@ impl Exporter {
             if msg.src != DevAddr(0x69) {
                 println!("Discarding transmission (wrong src addr) {:?}", msg);
                 return Ok(());
+            }
+
+            if *RESET_WANTED.lock().unwrap() {
+                let t = Transmission {
+                    src: DevAddr(69),
+                    msg: Command::Reset,
+                };
+
+                std::thread::sleep(std::time::Duration::from_millis(10));
+
+                let ser = postcard::to_stdvec(&t).unwrap();
+
+                println!("Transmitting command: {:?}", t);
+
+                lora.transmit_payload(&ser)
+                    .map_err(|e| color_eyre::eyre::eyre!("Opps: {:?}", e))?;
             }
 
             if let Message::StatusUpdate(upd) = msg.msg {

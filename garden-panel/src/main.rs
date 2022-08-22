@@ -153,6 +153,15 @@ fn ResponseDisplay(
         }
     })(ws.clone());
 
+    let reset = (|ws: DioxusWs| {
+        move |_| {
+            log.with_mut(|x| {
+                x.push(LogEntry::new("Enqueued RESET msg"));
+            });
+            ws.send_json(&UiCommand::Reset)
+        }
+    })(ws.clone());
+
     cx.render(rsx!(
         header {
             nav {
@@ -201,6 +210,14 @@ fn ResponseDisplay(
                 ValveStatus {
                     valve_status: valve_status.clone()
                     desired_valve_status: desired_valve_status.clone()
+                }
+            }
+            div {
+                class: "justify-center flex space-x-2 bg-gray-50 text-gray-800 py-6 px-6",
+                button {
+                    class: "inline-block px-6 py-2.5 bg-red-500 text-black font-medium text-xs leading-tight uppercase rounded shadow-md hover:bg-green-600 hover:shadow-lg focus:bg-green-600 focus:shadow-lg focus:outline-none focus:ring-0 active:bg-green-700 active:shadow-lg transition duration-150 ease-in-out",
+                    onclick: reset,
+                    "Reboot MCU"
                 }
             }
             CommandLog { log: log.clone() }
