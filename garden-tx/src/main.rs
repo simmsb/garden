@@ -155,7 +155,7 @@ mod app {
 
         // do a little dance with the brownout detector
         p.SYSCTRL.bod33.write(|w| w.enable().clear_bit());
-        while !p.SYSCTRL.pclksr.read().b33srdy().bit_is_clear() {}
+        while !p.SYSCTRL.pclksr.read().b33srdy().bit_is_set() {}
 
         p.SYSCTRL.bod33.write(|w| {
             unsafe { w.level().bits(48) }
@@ -171,7 +171,7 @@ mod app {
         while p.SYSCTRL.pclksr.read().bod33det().bit_is_set() {}
 
         p.SYSCTRL.bod33.write(|w| w.enable().clear_bit());
-        while !p.SYSCTRL.pclksr.read().b33srdy().bit_is_clear() {}
+        while !p.SYSCTRL.pclksr.read().b33srdy().bit_is_set() {}
 
         p.SYSCTRL.bod33.write(|w| w.action().reset());
         p.SYSCTRL.bod33.write(|w| w.enable().set_bit());
@@ -283,6 +283,7 @@ mod app {
         bme_task::spawn_after(Duration::secs(5)).unwrap();
         status_task::spawn_after(Duration::secs(10)).unwrap();
         wdt_task::spawn().unwrap();
+        reset_task::spawn_after(Duration::hours(1)).unwrap();
 
         (
             Shared { moisture, status },
@@ -357,6 +358,12 @@ mod app {
         cx.local.red_led.set_high().unwrap();
         cx.local.lora_delay.delay_ms(50u32);
         cx.local.red_led.set_low().unwrap();
+    }
+
+    #[task(priority = 1)]
+    fn reset_task(_cx: reset_task::Context) {
+        // cya on the other side
+        cortex_m::peripheral::SCB::sys_reset();
     }
 
     #[task(local = [bme, fails: u8 = 0], priority = 1)]
