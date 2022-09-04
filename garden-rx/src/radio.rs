@@ -239,6 +239,8 @@ impl Exporter {
                     msg: Command::Reset,
                 };
 
+                *RESET_WANTED.lock().unwrap() = false;
+
                 std::thread::sleep(std::time::Duration::from_millis(10));
 
                 let ser = postcard::to_stdvec(&t).unwrap();
