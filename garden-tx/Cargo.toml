@@ -34,7 +34,7 @@ heapless = { version = "0.7.15", features = ["serde"] }
 panic-probe = { version = "0.3.0", features = ["print-defmt"], optional = true }
 postcard = "1.0.1"
 serde = { version = "1.0.142", default-features = false }
-garden-shared = { path = "../garden-shared/" }
+garden-shared = { path = "../garden-shared/", default-features = false }
 uom = { version = "0.33.0", default-features = false, features = [
   "f32",
   "u16",

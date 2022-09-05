@@ -1,5 +1,4 @@
-#![no_std]
-
+#[cfg_attr(not(feature = "std"), no_std)]
 use core::time::Duration;
 
 #[allow(unused_imports)]
@@ -27,27 +26,57 @@ impl MoistureReading {
     }
 }
 
+#[derive(displaydoc::Display, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum MoistureSensorValidationError {
+    /// The lengths of two moisture readings are different
+    DifferingLengths,
+
+    /// The difference between two readings of sensor {sensor} is too large: {diff}
+    LargeDelta { sensor: usize, diff: f32 },
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct MoistureSensorReport {
     pub moisture: heapless::Vec<MoistureReading, 8>,
 }
 
 impl MoistureSensorReport {
-    pub fn sanity_check(self, last: Option<&Self>) -> Option<Self> {
+    pub fn sanity_check(self, last: Option<&Self>) -> Result<Self, MoistureSensorValidationError> {
         if let Some(last) = last {
             if self.moisture.len() != last.moisture.len() {
-                return None;
+                return Err(MoistureSensorValidationError::DifferingLengths);
             }
 
-            for (a, b) in self.moisture.iter().zip(&last.moisture) {
-                if (a.per_second() - b.per_second()).abs() > 5.0 {
-                    return None;
+            for (n, (a, b)) in self.moisture.iter().zip(&last.moisture).enumerate() {
+                let absolute_diff = (a.per_second() - b.per_second()).abs();
+                if absolute_diff > 15.0 {
+                    return Err(MoistureSensorValidationError::LargeDelta {
+                        sensor: n,
+                        diff: absolute_diff,
+                    });
                 }
             }
         }
 
-        Some(self)
+        Ok(self)
     }
+}
+
+#[derive(displaydoc::Display, Debug)]
+#[cfg_attr(feature = "std", derive(thiserror::Error))]
+pub enum BME688SensorValidationError {
+    /// The reported temperature of {0} is incredibly unlikely and probably sensor erorr
+    UnreasonablyHot(f32),
+
+    /// The delta of {0} between temperature readings is larger than should be possible, discarding as an error
+    LargeTempDelta(f32),
+
+    /// The delta of {0} between pressure readings is larger than should be possible, discarding as an error
+    LargePressureDelta(f32),
+
+    /// The delta of {0} between humidity readings is larger than should be possible, discarding as an error
+    LargeHumidityDelta(f32),
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
@@ -59,26 +88,33 @@ pub struct BME688SensorReport {
 }
 
 impl BME688SensorReport {
-    pub fn sanity_check(self, last: Option<&Self>) -> Option<BME688SensorReport> {
+    pub fn sanity_check(
+        self,
+        last: Option<&Self>,
+    ) -> Result<BME688SensorReport, BME688SensorValidationError> {
         if self.temp > ThermodynamicTemperature::new::<degree_celsius>(80.0) {
-            return None;
+            return Err(BME688SensorValidationError::UnreasonablyHot(
+                self.temp.get::<degree_celsius>(),
+            ));
         }
 
         if let Some(last) = last {
-            if (last.temp.get::<degree_celsius>() - self.temp.get::<degree_celsius>()).abs() > 20.0
-            {
-                return None;
+            let abs = (last.temp.get::<degree_celsius>() - self.temp.get::<degree_celsius>()).abs();
+            if abs > 20.0 {
+                return Err(BME688SensorValidationError::LargeTempDelta(abs));
             }
-            if (last.pressure - self.pressure).abs() > Pressure::new::<pascal>(100.0) {
-                return None;
+            let abs = (last.pressure - self.pressure).abs().get::<pascal>();
+            if abs > 100.0 {
+                return Err(BME688SensorValidationError::LargePressureDelta(abs));
             }
 
-            if (last.humidity - self.humidity).abs() > Ratio::new::<percent>(10.0) {
-                return None;
+            let abs = (last.humidity - self.humidity).abs().get::<percent>();
+            if abs > 50.0 {
+                return Err(BME688SensorValidationError::LargeHumidityDelta(abs));
             }
         }
 
-        Some(self)
+        Ok(self)
     }
 }
 

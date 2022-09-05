@@ -66,7 +66,7 @@ pub fn radio_side(status_sender: watch::Sender<Option<DeviceStatus>>) -> Result<
 }
 
 struct Exporter {
-    last_reading: Option<BME688SensorReport>,
+    last_bme_reading: Option<BME688SensorReport>,
     last_moisture_reading: Option<MoistureSensorReport>,
     status_sender: watch::Sender<Option<DeviceStatus>>,
     client: influxdb2::Client,
@@ -78,7 +78,7 @@ impl Exporter {
             Client::new("http://localhost:8086", "garden", "IoyGBd5jH-RScuacNjlUBSToAHtlKu270PesRi9E5Gg4M516GittWr2w5QdJPkn4X8Wh_VA7zfhxByOaviMuCQ==");
 
         Self {
-            last_reading: None,
+            last_bme_reading: None,
             last_moisture_reading: None,
             status_sender,
             client,
@@ -88,13 +88,17 @@ impl Exporter {
     fn submit(&mut self, msg: Message) -> Result<()> {
         match msg {
             Message::MoistureReport(r) => {
-                let r = r
-                    .sanity_check(self.last_moisture_reading.as_ref())
-                    .ok_or_else(|| color_eyre::eyre::eyre!("Invalid moisture reading"))?;
+                let r = match r.sanity_check(self.last_moisture_reading.as_ref()) {
+                    Ok(it) => it,
+                    Err(err) => {
+                        self.last_moisture_reading = None;
+                        return Err(err)?;
+                    }
+                };
                 self.last_moisture_reading = Some(r.clone());
 
                 for (n, r) in r.moisture.into_iter().enumerate() {
-                    let level = r.clocks as f32 / r.duration.as_secs_f32();
+                    let level = r.per_second();
 
                     let reading = DataPoint::builder("moisture")
                         .tag("sensor", n.to_string())
@@ -111,10 +115,14 @@ impl Exporter {
                 }
             }
             Message::BME688Report(r) => {
-                let r = r
-                    .sanity_check(self.last_reading.as_ref())
-                    .ok_or_else(|| color_eyre::eyre::eyre!("Invalid reading"))?;
-                self.last_reading = Some(r.clone());
+                let r = match r.sanity_check(self.last_bme_reading.as_ref()) {
+                    Ok(it) => it,
+                    Err(err) => {
+                        self.last_bme_reading = None;
+                        return Err(err)?;
+                    }
+                };
+                self.last_bme_reading = Some(r.clone());
 
                 let temp = r.temp.get::<degree_celsius>();
                 let pressure = r.pressure.get::<pascal>();
