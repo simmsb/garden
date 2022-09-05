@@ -19,7 +19,7 @@ from our house:
 
 - Receiver/ Base Station: This is a Raspberry Pi with a LoRa hat.
   It continuously listens for messages from the transmitter and
-  stores sensor readings in a prometheus database.
+  stores sensor readings in a influxdb database.
 
   It also hosts a control panel for turning on and off the pump.
 
