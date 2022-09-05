@@ -1,23 +1,18 @@
 version: "3.8"
 
 services:
-  prometheus:
-    image: "prom/prometheus"
-    restart: always
-    networks:
-      - prometheus
-    ports: 
-      - 9092:9090
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus:/prometheus
-  pushgateway:
-    image: "prom/pushgateway"
-    restart: always
+  influxdb:
+    image: "influxdb:2.4"
     ports:
-      - 9091:9091
-    networks:
-      - prometheus
+      - 8086:8086
+    volumes:
+      - influxdb:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=garden
+      - DOCKER_INFLUXDB_INIT_PASSWORD=garden_password
+      - DOCKER_INFLUXDB_INIT_ORG=garden
+      - DOCKER_INFLUXDB_INIT_BUCKET=garden
   grafana:
     image: "grafana/grafana"
     volumes:
@@ -26,11 +21,11 @@ services:
     ports:
       - 9093:3000
     networks:
-      - prometheus
+      - influxdb
 
 networks:
-  prometheus:
+  influxdb:
 
 volumes:
-  prometheus:
+  influxdb:
   grafana_data:

@@ -28,7 +28,9 @@ struct State {
 async fn main() -> Result<()> {
     let (status_sender, status_recv) = watch::channel(None);
 
-    std::thread::spawn(|| {
+    let rt_handle = tokio::runtime::Handle::current();
+    std::thread::spawn(move || {
+        let _handle = rt_handle.enter();
         if let Err(e) = radio::radio_side(status_sender) {
             println!("{:?}", e);
         }
